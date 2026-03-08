@@ -22,6 +22,67 @@ export const setBackendJwt = (token: string) => {
   localStorage.setItem(BACKEND_JWT_STORAGE_KEY, token);
 };
 
+export type BackendUser = {
+  sub?: string;
+  login?: string;
+  email?: string;
+  name?: string;
+  avatarUrl?: string;
+};
+
+const decodeJwtPayload = (token: string) => {
+  try {
+    const [, payload] = token.split(".");
+    if (!payload) {
+      return null;
+    }
+
+    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized.padEnd(
+      normalized.length + ((4 - (normalized.length % 4)) % 4),
+      "=",
+    );
+
+    const binary = atob(padded);
+    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+    const json = new TextDecoder("utf-8").decode(bytes);
+
+    return JSON.parse(json);
+  } catch (error) {
+    console.error("Failed to decode backend JWT", error);
+    return null;
+  }
+};
+
+export const getBackendUser = (): BackendUser | null => {
+  const token = getBackendJwt();
+  if (!token) {
+    return null;
+  }
+
+  const payload = decodeJwtPayload(token);
+  if (!payload) {
+    return null;
+  }
+
+  return {
+    sub: payload.sub,
+    login: payload.login,
+    email: payload.email,
+    name: payload.name,
+    avatarUrl: payload.avatarUrl,
+  };
+};
+
+export const getBackendDisplayName = () => {
+  const user = getBackendUser();
+  if (!user) {
+    return "";
+  }
+
+  return user.name || user.login || user.email || user.sub || "";
+};
+
 export const clearBackendJwt = () => {
   localStorage.removeItem(BACKEND_JWT_STORAGE_KEY);
 };
