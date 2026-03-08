@@ -115,7 +115,7 @@ export const createSharedDocument = async (
   if (payload instanceof Blob) {
     body = payload;
   } else if (payload instanceof Uint8Array) {
-    body = new Blob([payload], { type: "application/json" });
+    body = new TextDecoder().decode(payload);
   } else {
     body = new Blob([payload], { type: "application/json" });
   }
