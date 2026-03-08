@@ -97,6 +97,7 @@ import {
   isBackendLoggedIn,
   redirectToBackendLogin,
   setBackendJwt,
+  getBackendDisplayName,
   clearBackendJwt,
   listCanvases,
 } from "./data/backend";
@@ -384,6 +385,7 @@ const ExcalidrawWrapper = () => {
     Array<{ id: string; name: string }>
   >([]);
   const [backendLoadingCanvases, setBackendLoadingCanvases] = useState(false);
+  const [backendDisplayName, setBackendDisplayName] = useState("");
   const isCollabDisabled = isRunningInIframe();
 
   const { editorTheme, appTheme, setAppTheme } = useHandleAppTheme();
@@ -424,13 +426,16 @@ const ExcalidrawWrapper = () => {
     if (token) {
       setBackendJwt(token);
       setBackendLoggedIn(true);
+      setBackendDisplayName(getBackendDisplayName());
 
       url.searchParams.delete("token");
       window.history.replaceState({}, "", url.toString());
       return;
     }
 
-    setBackendLoggedIn(isBackendLoggedIn());
+    const loggedIn = isBackendLoggedIn();
+    setBackendLoggedIn(loggedIn);
+    setBackendDisplayName(loggedIn ? getBackendDisplayName() : "");
   }, []);
 
   useEffect(() => {
@@ -991,10 +996,12 @@ const ExcalidrawWrapper = () => {
           setTheme={(theme) => setAppTheme(theme)}
           refresh={() => forceRefresh((prev) => !prev)}
           backendLoggedIn={backendLoggedIn}
+          backendDisplayName={backendDisplayName}
           onBackendLogin={() => redirectToBackendLogin()}
           onBackendLogout={() => {
             clearBackendJwt();
             setBackendLoggedIn(false);
+            setBackendDisplayName("");
             setBackendCanvases([]);
           }}
         />
