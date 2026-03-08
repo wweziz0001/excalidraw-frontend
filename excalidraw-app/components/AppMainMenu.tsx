@@ -19,6 +19,9 @@ export const AppMainMenu: React.FC<{
   onCollabDialogOpen: () => any;
   isCollaborating: boolean;
   isCollabEnabled: boolean;
+  backendLoggedIn: boolean;
+  onBackendLogin: () => void;
+  onBackendLogout: () => void;
   theme: Theme | "system";
   setTheme: (theme: Theme | "system") => void;
   refresh: () => void;
@@ -57,6 +60,15 @@ export const AppMainMenu: React.FC<{
         }?utm_source=signin&utm_medium=app&utm_content=hamburger`}
         className="highlighted"
       >
+        {props.backendLoggedIn ? (
+          <button type="button" onClick={props.onBackendLogout}>
+            Sign out
+          </button>
+        ) : (
+          <button type="button" onClick={props.onBackendLogin}>
+            Sign in
+          </button>
+        )}
         {isExcalidrawPlusSignedUser ? "Sign in" : "Sign up"}
       </MainMenu.ItemLink>
       {isDevEnv() && (

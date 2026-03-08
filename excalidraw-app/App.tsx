@@ -908,79 +908,6 @@ const ExcalidrawWrapper = () => {
         "is-collaborating": isCollaborating,
       })}
     >
-      {ENABLE_BACKEND_AUTH && (
-        <div
-          style={{
-            position: "fixed",
-            top: 12,
-            right: 12,
-            zIndex: 9999,
-            display: "flex",
-            gap: 8,
-            alignItems: "center",
-            background: "white",
-            border: "1px solid #ddd",
-            borderRadius: 8,
-            padding: "8px 12px",
-            boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-          }}
-        >
-          {!backendLoggedIn ? (
-            <button type="button" onClick={() => redirectToBackendLogin()}>
-              Sign in
-            </button>
-          ) : (
-            <>
-              <span>Signed in</span>
-              <button
-                type="button"
-                onClick={() => {
-                  clearBackendJwt();
-                  setBackendLoggedIn(false);
-                  setBackendCanvases([]);
-                }}
-              >
-                Sign out
-              </button>
-            </>
-          )}
-        </div>
-      )}
-
-      {ENABLE_BACKEND_AUTH && backendLoggedIn && (
-        <div
-          style={{
-            position: "fixed",
-            top: 60,
-            right: 12,
-            zIndex: 9999,
-            width: 280,
-            maxHeight: 320,
-            overflow: "auto",
-            background: "white",
-            border: "1px solid #ddd",
-            borderRadius: 8,
-            padding: 12,
-            boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-          }}
-        >
-          <strong>My Canvases</strong>
-          {backendLoadingCanvases ? (
-            <div style={{ marginTop: 8 }}>Loading…</div>
-          ) : backendCanvases.length === 0 ? (
-            <div style={{ marginTop: 8 }}>No canvases yet</div>
-          ) : (
-            <ul style={{ marginTop: 8, paddingLeft: 18 }}>
-              {backendCanvases.map((canvas) => (
-                <li key={canvas.id}>
-                  {canvas.name} <small>({canvas.id})</small>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
-
       <Excalidraw
         excalidrawAPI={excalidrawRefCallback}
         onChange={onChange}
@@ -1063,10 +990,19 @@ const ExcalidrawWrapper = () => {
           theme={appTheme}
           setTheme={(theme) => setAppTheme(theme)}
           refresh={() => forceRefresh((prev) => !prev)}
+          backendLoggedIn={backendLoggedIn}
+          onBackendLogin={() => redirectToBackendLogin()}
+          onBackendLogout={() => {
+            clearBackendJwt();
+            setBackendLoggedIn(false);
+            setBackendCanvases([]);
+          }}
         />
         <AppWelcomeScreen
           onCollabDialogOpen={onCollabDialogOpen}
           isCollabEnabled={!isCollabDisabled}
+          backendLoggedIn={backendLoggedIn}
+          onBackendLogin={() => redirectToBackendLogin()}
         />
         <OverwriteConfirmDialog>
           <OverwriteConfirmDialog.Actions.ExportToImage />
@@ -1130,8 +1066,11 @@ const ExcalidrawWrapper = () => {
           }}
         />
 
-        <AppSidebar />
-
+        <AppSidebar
+          backendLoggedIn={backendLoggedIn}
+          backendCanvases={backendCanvases}
+          backendLoadingCanvases={backendLoadingCanvases}
+        />
         {errorMessage && (
           <ErrorDialog onClose={() => setErrorMessage("")}>
             {errorMessage}

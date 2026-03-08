@@ -9,6 +9,8 @@ import { isExcalidrawPlusSignedUser } from "../app_constants";
 export const AppWelcomeScreen: React.FC<{
   onCollabDialogOpen: () => any;
   isCollabEnabled: boolean;
+  backendLoggedIn: boolean;
+  onBackendLogin: () => void;
 }> = React.memo((props) => {
   const { t } = useI18n();
   let headingContent;
