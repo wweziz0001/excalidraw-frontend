@@ -62,14 +62,8 @@ export const isExcalidrawPlusSignedUser = document.cookie.includes(
 
 export const BACKEND_V2_URL =
   import.meta.env.VITE_APP_HTTP_STORAGE_BACKEND_URL || "";
-
-export const AUTH_BACKEND_URL =
-  import.meta.env.VITE_APP_AUTH_BACKEND || "";
-
-export const AI_BACKEND_URL =
-  import.meta.env.VITE_APP_AI_BACKEND || "";
-
+export const AUTH_BACKEND_URL = import.meta.env.VITE_APP_AUTH_BACKEND || "";
+export const AI_BACKEND_URL = import.meta.env.VITE_APP_AI_BACKEND || "";
 export const ENABLE_BACKEND_AUTH =
   import.meta.env.VITE_APP_ENABLE_BACKEND_AUTH === "true";
-
 export const BACKEND_JWT_STORAGE_KEY = "EXCALIDRAW_BACKEND_JWT";

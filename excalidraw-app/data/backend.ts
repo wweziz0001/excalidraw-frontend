@@ -30,13 +30,15 @@ export const isBackendLoggedIn = () => {
   return !!getBackendJwt();
 };
 
-export const getAuthHeaders = () => {
+export const getAuthHeaders = (): HeadersInit => {
   const token = getBackendJwt();
-  return token
-    ? {
-        Authorization: `Bearer ${token}`,
-      }
-    : {};
+  if (!token) {
+    return {};
+  }
+
+  return {
+    Authorization: `Bearer ${token}`,
+  };
 };
 
 export const redirectToBackendLogin = () => {
@@ -49,9 +51,7 @@ export const redirectToBackendLogin = () => {
 export const listCanvases = async (): Promise<BackendCanvas[]> => {
   const res = await fetch(`${BACKEND_V2_URL}/kv/`, {
     method: "GET",
-    headers: {
-      ...getAuthHeaders(),
-    },
+    headers: getAuthHeaders(),
     credentials: "include",
   });
 
@@ -65,9 +65,7 @@ export const listCanvases = async (): Promise<BackendCanvas[]> => {
 export const getCanvas = async (key: string): Promise<BackendCanvas> => {
   const res = await fetch(`${BACKEND_V2_URL}/kv/${encodeURIComponent(key)}/`, {
     method: "GET",
-    headers: {
-      ...getAuthHeaders(),
-    },
+    headers: getAuthHeaders(),
     credentials: "include",
   });
 
@@ -100,9 +98,7 @@ export const saveCanvas = async (
 export const deleteCanvas = async (key: string): Promise<void> => {
   const res = await fetch(`${BACKEND_V2_URL}/kv/${encodeURIComponent(key)}/`, {
     method: "DELETE",
-    headers: {
-      ...getAuthHeaders(),
-    },
+    headers: getAuthHeaders(),
     credentials: "include",
   });
 
@@ -111,13 +107,18 @@ export const deleteCanvas = async (key: string): Promise<void> => {
   }
 };
 
-export const createSharedDocument = async (payload: Blob | string | Uint8Array) => {
-  const body =
-    payload instanceof Blob
-      ? payload
-      : payload instanceof Uint8Array
-        ? payload
-        : new Blob([payload], { type: "application/json" });
+export const createSharedDocument = async (
+  payload: Blob | string | Uint8Array,
+) => {
+  let body: BodyInit;
+
+  if (payload instanceof Blob) {
+    body = payload;
+  } else if (payload instanceof Uint8Array) {
+    body = new Blob([payload], { type: "application/json" });
+  } else {
+    body = new Blob([payload], { type: "application/json" });
+  }
 
   const res = await fetch(`${BACKEND_V2_URL}/post/`, {
     method: "POST",

@@ -413,10 +413,9 @@ const ExcalidrawWrapper = () => {
     }, VERSION_TIMEOUT);
   }, []);
 
-
   useEffect(() => {
     if (!ENABLE_BACKEND_AUTH) {
-    return;
+      return;
     }
 
     const url = new URL(window.location.href);
