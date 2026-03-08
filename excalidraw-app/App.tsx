@@ -91,7 +91,16 @@ import {
   isExcalidrawPlusSignedUser,
   STORAGE_KEYS,
   SYNC_BROWSER_TABS_TIMEOUT,
+  ENABLE_BACKEND_AUTH,
 } from "./app_constants";
+import {
+  isBackendLoggedIn,
+  redirectToBackendLogin,
+  setBackendJwt,
+  clearBackendJwt,
+  listCanvases,
+} from "./data/backend";
+
 import Collab, {
   collabAPIAtom,
   isCollaboratingAtom,
@@ -370,6 +379,11 @@ const initializeScene = async (opts: {
 
 const ExcalidrawWrapper = () => {
   const [errorMessage, setErrorMessage] = useState("");
+  const [backendLoggedIn, setBackendLoggedIn] = useState(false);
+  const [backendCanvases, setBackendCanvases] = useState<
+    Array<{ id: string; name: string }>
+  >([]);
+  const [backendLoadingCanvases, setBackendLoadingCanvases] = useState(false);
   const isCollabDisabled = isRunningInIframe();
 
   const { editorTheme, appTheme, setAppTheme } = useHandleAppTheme();
@@ -398,6 +412,63 @@ const ExcalidrawWrapper = () => {
       trackEvent("load", "version", getVersion());
     }, VERSION_TIMEOUT);
   }, []);
+
+
+  useEffect(() => {
+    if (!ENABLE_BACKEND_AUTH) {
+    return;
+    }
+
+    const url = new URL(window.location.href);
+    const token = url.searchParams.get("token");
+
+    if (token) {
+      setBackendJwt(token);
+      setBackendLoggedIn(true);
+
+      url.searchParams.delete("token");
+      window.history.replaceState({}, "", url.toString());
+      return;
+    }
+
+    setBackendLoggedIn(isBackendLoggedIn());
+  }, []);
+
+  useEffect(() => {
+    if (!ENABLE_BACKEND_AUTH || !backendLoggedIn) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const load = async () => {
+      try {
+        setBackendLoadingCanvases(true);
+        const canvases = await listCanvases();
+
+        if (!cancelled) {
+          setBackendCanvases(
+            canvases.map((item) => ({
+              id: item.id,
+              name: item.name || item.id,
+            })),
+          );
+        }
+      } catch (error) {
+        console.error("Failed to load backend canvases", error);
+      } finally {
+        if (!cancelled) {
+          setBackendLoadingCanvases(false);
+        }
+      }
+    };
+
+    void load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [backendLoggedIn]);
 
   const [excalidrawAPI, excalidrawRefCallback] =
     useCallbackRefState<ExcalidrawImperativeAPI>();
@@ -838,6 +909,79 @@ const ExcalidrawWrapper = () => {
         "is-collaborating": isCollaborating,
       })}
     >
+      {ENABLE_BACKEND_AUTH && (
+        <div
+          style={{
+            position: "fixed",
+            top: 12,
+            right: 12,
+            zIndex: 9999,
+            display: "flex",
+            gap: 8,
+            alignItems: "center",
+            background: "white",
+            border: "1px solid #ddd",
+            borderRadius: 8,
+            padding: "8px 12px",
+            boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+          }}
+        >
+          {!backendLoggedIn ? (
+            <button type="button" onClick={() => redirectToBackendLogin()}>
+              Sign in
+            </button>
+          ) : (
+            <>
+              <span>Signed in</span>
+              <button
+                type="button"
+                onClick={() => {
+                  clearBackendJwt();
+                  setBackendLoggedIn(false);
+                  setBackendCanvases([]);
+                }}
+              >
+                Sign out
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
+      {ENABLE_BACKEND_AUTH && backendLoggedIn && (
+        <div
+          style={{
+            position: "fixed",
+            top: 60,
+            right: 12,
+            zIndex: 9999,
+            width: 280,
+            maxHeight: 320,
+            overflow: "auto",
+            background: "white",
+            border: "1px solid #ddd",
+            borderRadius: 8,
+            padding: 12,
+            boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+          }}
+        >
+          <strong>My Canvases</strong>
+          {backendLoadingCanvases ? (
+            <div style={{ marginTop: 8 }}>Loading…</div>
+          ) : backendCanvases.length === 0 ? (
+            <div style={{ marginTop: 8 }}>No canvases yet</div>
+          ) : (
+            <ul style={{ marginTop: 8, paddingLeft: 18 }}>
+              {backendCanvases.map((canvas) => (
+                <li key={canvas.id}>
+                  {canvas.name} <small>({canvas.id})</small>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
       <Excalidraw
         excalidrawAPI={excalidrawRefCallback}
         onChange={onChange}

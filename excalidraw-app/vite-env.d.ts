@@ -15,6 +15,11 @@ interface ImportMetaEnv {
   VITE_APP_PORTAL_URL: string;
   VITE_APP_AI_BACKEND: string;
 
+  // new constant for excalidraw-auth
+  VITE_APP_HTTP_STORAGE_BACKEND_URL: string;
+  VITE_APP_AUTH_BACKEND: string;
+  VITE_APP_ENABLE_BACKEND_AUTH: string;
+
   VITE_APP_FIREBASE_CONFIG: string;
 
   // whether to disable live reload / HMR. Usuaully what you want to do when
