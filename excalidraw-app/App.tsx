@@ -5,6 +5,7 @@ import {
   CaptureUpdateAction,
   reconcileElements,
   useEditorInterface,
+  exportToCanvas,
 } from "@excalidraw/excalidraw";
 import { trackEvent } from "@excalidraw/excalidraw/analytics";
 import { getDefaultAppState } from "@excalidraw/excalidraw/appState";
@@ -100,6 +101,9 @@ import {
   getBackendDisplayName,
   clearBackendJwt,
   listCanvases,
+  saveCanvas,
+  getCanvas,
+  deleteCanvas,
 } from "./data/backend";
 
 import Collab, {
@@ -382,10 +386,37 @@ const ExcalidrawWrapper = () => {
   const [errorMessage, setErrorMessage] = useState("");
   const [backendLoggedIn, setBackendLoggedIn] = useState(false);
   const [backendCanvases, setBackendCanvases] = useState<
-    Array<{ id: string; name: string }>
+    Array<{ id: string; name: string; thumbnail?: string }>
   >([]);
   const [backendLoadingCanvases, setBackendLoadingCanvases] = useState(false);
   const [backendDisplayName, setBackendDisplayName] = useState("");
+  const handleDeleteCanvas = async (canvasId: string) => {
+    try {
+      await deleteCanvas(canvasId);
+      await refreshBackendCanvases();
+    } catch (error) {
+      console.error("Failed to delete canvas", error);
+      setErrorMessage("Failed to delete canvas");
+    }
+  };
+  const refreshBackendCanvases = async () => {
+    try {
+      setBackendLoadingCanvases(true);
+      const canvases = await listCanvases();
+
+      setBackendCanvases(
+        canvases.map((item) => ({
+          id: item.id,
+          name: item.name || item.id,
+          thumbnail: item.thumbnail,
+        })),
+      );
+    } catch (error) {
+      console.error("Failed to load backend canvases", error);
+    } finally {
+      setBackendLoadingCanvases(false);
+    }
+  };
   const isCollabDisabled = isRunningInIframe();
 
   const { editorTheme, appTheme, setAppTheme } = useHandleAppTheme();
@@ -443,35 +474,7 @@ const ExcalidrawWrapper = () => {
       return;
     }
 
-    let cancelled = false;
-
-    const load = async () => {
-      try {
-        setBackendLoadingCanvases(true);
-        const canvases = await listCanvases();
-
-        if (!cancelled) {
-          setBackendCanvases(
-            canvases.map((item) => ({
-              id: item.id,
-              name: item.name || item.id,
-            })),
-          );
-        }
-      } catch (error) {
-        console.error("Failed to load backend canvases", error);
-      } finally {
-        if (!cancelled) {
-          setBackendLoadingCanvases(false);
-        }
-      }
-    };
-
-    void load();
-
-    return () => {
-      cancelled = true;
-    };
+    void refreshBackendCanvases();
   }, [backendLoggedIn]);
 
   const [excalidrawAPI, excalidrawRefCallback] =
@@ -781,7 +784,132 @@ const ExcalidrawWrapper = () => {
       );
     }
   };
+  const decodeBase64Utf8 = (value: string) => {
+    const binary = atob(value);
+    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+    return new TextDecoder("utf-8").decode(bytes);
+  };
 
+  const parseStoredCanvasData = (rawData: unknown) => {
+    if (!rawData) {
+      return null;
+    }
+
+    if (typeof rawData === "string") {
+      try {
+        return JSON.parse(rawData);
+      } catch {
+        try {
+          return JSON.parse(decodeBase64Utf8(rawData));
+        } catch (error) {
+          console.error("Failed to parse stored canvas data", error);
+          return null;
+        }
+      }
+    }
+
+    if (typeof rawData === "object") {
+      return rawData;
+    }
+
+    return null;
+  };
+
+  const generateCanvasThumbnail = async () => {
+    if (!excalidrawAPI) {
+      return "";
+    }
+
+    try {
+      const elements = excalidrawAPI
+        .getSceneElementsIncludingDeleted()
+        .filter((element) => !element.isDeleted);
+
+      if (!elements.length) {
+        return "";
+      }
+
+      const canvas = await exportToCanvas({
+        elements,
+        appState: {
+          ...excalidrawAPI.getAppState(),
+          exportBackground: true,
+        },
+        files: excalidrawAPI.getFiles(),
+        getDimensions: () => ({
+          width: 320,
+          height: 180,
+          scale: 1,
+        }),
+      });
+
+      return canvas.toDataURL("image/png");
+    } catch (error) {
+      console.error("Failed to generate thumbnail", error);
+      return "";
+    }
+  };
+  const handleCreateCanvas = async () => {
+    if (!excalidrawAPI) {
+      return;
+    }
+
+    const key = `canvas-${Date.now()}`;
+
+    const elements = excalidrawAPI.getSceneElementsIncludingDeleted();
+    const appState = excalidrawAPI.getAppState();
+    const files = excalidrawAPI.getFiles();
+    const thumbnail = await generateCanvasThumbnail();
+
+    const payload = {
+      id: key,
+      name: excalidrawAPI.getName() || `Canvas ${new Date().toLocaleString()}`,
+      thumbnail,
+      data: JSON.stringify({
+        elements,
+        appState,
+        files,
+      }),
+    };
+
+    try {
+      await saveCanvas(key, payload);
+      await refreshBackendCanvases();
+    } catch (error) {
+      console.error("Failed to create canvas", error);
+      setErrorMessage("Failed to create canvas");
+    }
+  };
+  const handleOpenCanvas = async (canvasId: string) => {
+    if (!excalidrawAPI) {
+      return;
+    }
+
+    try {
+      const canvas = await getCanvas(canvasId);
+      const payload = parseStoredCanvasData(canvas.data);
+
+      if (!payload) {
+        throw new Error("Canvas payload is empty or invalid");
+      }
+
+      excalidrawAPI.updateScene({
+        elements: payload.elements || [],
+        appState: {
+          ...payload.appState,
+          collaborators: new Map(),
+        },
+        captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+      });
+
+      if (payload.files) {
+        excalidrawAPI.addFiles(payload.files);
+      }
+    } catch (error) {
+      console.error("Failed to open canvas", error);
+      setErrorMessage("Failed to open canvas");
+    }
+  };
   const [latestShareableLink, setLatestShareableLink] = useState<string | null>(
     null,
   );
@@ -1077,6 +1205,9 @@ const ExcalidrawWrapper = () => {
           backendLoggedIn={backendLoggedIn}
           backendCanvases={backendCanvases}
           backendLoadingCanvases={backendLoadingCanvases}
+          onCreateCanvas={handleCreateCanvas}
+          onOpenCanvas={handleOpenCanvas}
+          onDeleteCanvas={handleDeleteCanvas}
         />
         {errorMessage && (
           <ErrorDialog onClose={() => setErrorMessage("")}>

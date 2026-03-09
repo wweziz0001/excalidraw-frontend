@@ -53,7 +53,7 @@ const decodeJwtPayload = (token: string) => {
     return null;
   }
 };
-
+const newCanvasId = () => `canvas-${Date.now()}`;
 export const getBackendUser = (): BackendUser | null => {
   const token = getBackendJwt();
   if (!token) {

@@ -10,14 +10,20 @@ import "./AppSidebar.scss";
 
 type AppSidebarProps = {
   backendLoggedIn: boolean;
-  backendCanvases: Array<{ id: string; name: string }>;
+  backendCanvases: Array<{ id: string; name: string; thumbnail?: string }>;
   backendLoadingCanvases: boolean;
+  onCreateCanvas: () => void;
+  onOpenCanvas: (canvasId: string) => void;
+  onDeleteCanvas: (canvasId: string) => void;
 };
 
 export const AppSidebar = ({
   backendLoggedIn,
   backendCanvases,
   backendLoadingCanvases,
+  onCreateCanvas,
+  onOpenCanvas,
+  onDeleteCanvas,
 }: AppSidebarProps) => {
   const { theme, openSidebar } = useUIAppState();
 
@@ -47,22 +53,113 @@ export const AppSidebar = ({
           {presentationIcon}
         </Sidebar.TabTrigger>
       </DefaultSidebar.TabTriggers>
+
       {backendLoggedIn && (
         <Sidebar.Tab tab="canvases" className="px-3">
           <div className="app-sidebar-promo-container">
             <div className="app-sidebar-promo-text">My Canvases</div>
+
+            <button
+              type="button"
+              onClick={onCreateCanvas}
+              style={{
+                marginBottom: 12,
+                width: "100%",
+              }}
+            >
+              New Canvas
+            </button>
 
             {backendLoadingCanvases ? (
               <div>Loading…</div>
             ) : backendCanvases.length === 0 ? (
               <div>No canvases yet</div>
             ) : (
-              <ul style={{ margin: 0, paddingLeft: 18 }}>
+              <ul style={{ margin: 0, paddingLeft: 0, listStyle: "none" }}>
                 {backendCanvases.map((canvas) => (
-                  <li key={canvas.id} style={{ marginBottom: 8 }}>
-                    <div style={{ fontWeight: 500 }}>{canvas.name}</div>
-                    <div style={{ fontSize: 12, opacity: 0.6 }}>
-                      {canvas.id}
+                  <li key={canvas.id} style={{ marginBottom: 10 }}>
+                    <div
+                      style={{
+                        width: "100%",
+                        textAlign: "left",
+                        border: "1px solid #ddd",
+                        borderRadius: 8,
+                        background: "white",
+                        padding: 10,
+                      }}
+                    >
+                      <div
+                        onClick={() => onOpenCanvas(canvas.id)}
+                        style={{
+                          cursor: "pointer",
+                        }}
+                      >
+                        {canvas.thumbnail ? (
+                          <img
+                            src={canvas.thumbnail}
+                            alt={canvas.name}
+                            style={{
+                              width: "100%",
+                              height: 100,
+                              objectFit: "cover",
+                              borderRadius: 6,
+                              marginBottom: 8,
+                            }}
+                          />
+                        ) : (
+                          <div
+                            style={{
+                              width: "100%",
+                              height: 100,
+                              borderRadius: 6,
+                              marginBottom: 8,
+                              background: "#f5f5f5",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              fontSize: 12,
+                              opacity: 0.6,
+                            }}
+                          >
+                            No thumbnail
+                          </div>
+                        )}
+
+                        <div style={{ fontWeight: 600 }}>{canvas.name}</div>
+                        <div style={{ fontSize: 12, opacity: 0.6, marginBottom: 8 }}>
+                          {canvas.id}
+                        </div>
+                      </div>
+
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <button
+                          type="button"
+                          onClick={() => onOpenCanvas(canvas.id)}
+                          style={{
+                            flex: 1,
+                            border: "1px solid #ddd",
+                            borderRadius: 6,
+                            padding: "6px 10px",
+                            cursor: "pointer",
+                          }}
+                        >
+                          Open
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => onDeleteCanvas(canvas.id)}
+                          style={{
+                            flex: 1,
+                            border: "1px solid #ddd",
+                            borderRadius: 6,
+                            padding: "6px 10px",
+                            cursor: "pointer",
+                          }}
+                        >
+                          Delete
+                        </button>
+                      </div>
                     </div>
                   </li>
                 ))}
@@ -71,6 +168,7 @@ export const AppSidebar = ({
           </div>
         </Sidebar.Tab>
       )}
+
       <Sidebar.Tab tab="comments">
         <div className="app-sidebar-promo-container">
           <div
@@ -94,6 +192,7 @@ export const AppSidebar = ({
           </LinkButton>
         </div>
       </Sidebar.Tab>
+
       <Sidebar.Tab tab="presentation" className="px-3">
         <div className="app-sidebar-promo-container">
           <div
