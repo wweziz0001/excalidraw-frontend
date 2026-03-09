@@ -43,7 +43,7 @@ export const AppSidebar = ({
 }: AppSidebarProps) => {
   const { theme, openSidebar } = useUIAppState();
   const [renamingCanvasId, setRenamingCanvasId] = useState<string | null>(null);
-  const [renamingValue, setRenamingValue] = useState("");
+  const [renamingValue, setRenamingValue] = useState<string>("");
   return (
     <DefaultSidebar>
       <DefaultSidebar.TabTriggers>
@@ -84,7 +84,8 @@ export const AppSidebar = ({
                   opacity: 0.7,
                 }}
               >
-                Current: {currentCanvasName || currentCanvasId}
+                Current-Name: {currentCanvasName} && Current-ID:
+                {currentCanvasId}
               </div>
             )}
 

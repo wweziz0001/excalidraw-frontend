@@ -852,13 +852,12 @@ const ExcalidrawWrapper = () => {
       return "";
     }
   };
-  const saveCanvasWithIdAndName = async (
-    canvasId: string,
-    canvasName: string,
-  ) => {
+  const saveCanvasWithIdAndName = async (canvasId: string, canvasName: string) => {
     if (!excalidrawAPI) {
       return;
     }
+
+    excalidrawAPI.setName(canvasName);
 
     const elements = excalidrawAPI.getSceneElementsIncludingDeleted();
     const appState = excalidrawAPI.getAppState();
@@ -866,14 +865,13 @@ const ExcalidrawWrapper = () => {
     const thumbnail = await generateCanvasThumbnail();
 
     const payload = {
-      id: canvasId,
       name: canvasName,
       thumbnail,
-      data: JSON.stringify({
+      data: {
         elements,
         appState,
         files,
-      }),
+      },
     };
 
     await saveCanvas(canvasId, payload);
@@ -954,15 +952,19 @@ const ExcalidrawWrapper = () => {
 
     try {
       const canvas = await getCanvas(canvasId);
-      const payload = parseStoredCanvasData(canvas.data);
+      const payload = canvas.data;
 
       if (!payload) {
-        throw new Error("Canvas payload is empty or invalid");
+        throw new Error("Canvas payload is empty");
       }
 
       setCurrentCanvasId(canvas.id || canvasId);
       setCurrentCanvasName(canvas.name || "");
       setCanvasNameInput(canvas.name || "");
+
+      if (canvas.name) {
+        excalidrawAPI.setName(canvas.name);
+      }
 
       excalidrawAPI.updateScene({
         elements: payload.elements || [],

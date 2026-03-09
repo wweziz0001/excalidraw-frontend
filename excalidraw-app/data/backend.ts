@@ -9,7 +9,11 @@ export type BackendCanvas = {
   id: string;
   name: string;
   thumbnail?: string;
-  data?: string | Uint8Array | ArrayBuffer;
+  data?: {
+    elements?: any[];
+    appState?: Record<string, any>;
+    files?: Record<string, any>;
+  };
   createdAt?: string;
   updatedAt?: string;
 };
@@ -53,7 +57,6 @@ const decodeJwtPayload = (token: string) => {
     return null;
   }
 };
-const newCanvasId = () => `canvas-${Date.now()}`;
 export const getBackendUser = (): BackendUser | null => {
   const token = getBackendJwt();
   if (!token) {
