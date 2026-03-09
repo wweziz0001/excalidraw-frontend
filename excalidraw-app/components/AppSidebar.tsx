@@ -47,7 +47,6 @@ export const AppSidebar = ({
   return (
     <DefaultSidebar>
       <DefaultSidebar.TabTriggers>
-
         <Sidebar.TabTrigger
           tab="comments"
           style={{ opacity: openSidebar?.tab === "comments" ? 1 : 0.4 }}
