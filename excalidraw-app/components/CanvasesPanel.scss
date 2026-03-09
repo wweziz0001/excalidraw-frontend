@@ -71,6 +71,16 @@
       padding: 0 0.125rem;
     }
 
+    &__draftWarning {
+      border: 1px solid var(--default-border-color);
+      background: var(--button-gray-1);
+      border-radius: 0.875rem;
+      padding: 0.75rem;
+      font-size: 0.75rem;
+      line-height: 1.5;
+      color: var(--text-primary-color);
+    }
+
     &__input {
       width: 100%;
       box-sizing: border-box;
@@ -221,6 +231,21 @@
 
       &:hover {
         background: var(--button-hover-bg);
+      }
+    }
+
+    &__action--danger {
+      &:hover {
+        background: var(--color-danger);
+        border-color: var(--color-danger);
+        color: var(--color-danger-text, #fff);
+      }
+
+      &:active {
+        background: var(--color-danger);
+        border-color: var(--color-danger);
+        color: var(--color-danger-text, #fff);
+        opacity: 0.92;
       }
     }
   }
