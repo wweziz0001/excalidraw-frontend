@@ -390,6 +390,8 @@ const ExcalidrawWrapper = () => {
   >([]);
   const [backendLoadingCanvases, setBackendLoadingCanvases] = useState(false);
   const [backendDisplayName, setBackendDisplayName] = useState("");
+  const [currentCanvasId, setCurrentCanvasId] = useState<string | null>(null);
+  const [currentCanvasName, setCurrentCanvasName] = useState("");
   const handleDeleteCanvas = async (canvasId: string) => {
     try {
       await deleteCanvas(canvasId);
@@ -849,12 +851,13 @@ const ExcalidrawWrapper = () => {
       return "";
     }
   };
-  const handleCreateCanvas = async () => {
+  const saveCanvasWithIdAndName = async (
+    canvasId: string,
+    canvasName: string,
+  ) => {
     if (!excalidrawAPI) {
       return;
     }
-
-    const key = `canvas-${Date.now()}`;
 
     const elements = excalidrawAPI.getSceneElementsIncludingDeleted();
     const appState = excalidrawAPI.getAppState();
@@ -862,8 +865,8 @@ const ExcalidrawWrapper = () => {
     const thumbnail = await generateCanvasThumbnail();
 
     const payload = {
-      id: key,
-      name: excalidrawAPI.getName() || `Canvas ${new Date().toLocaleString()}`,
+      id: canvasId,
+      name: canvasName,
       thumbnail,
       data: JSON.stringify({
         elements,
@@ -872,12 +875,85 @@ const ExcalidrawWrapper = () => {
       }),
     };
 
+    await saveCanvas(canvasId, payload);
+
+    setCurrentCanvasId(canvasId);
+    setCurrentCanvasName(canvasName);
+
+    await refreshBackendCanvases();
+  };
+  const handleCreateCanvas = async () => {
+    if (!excalidrawAPI) {
+      return;
+    }
+
+    const name = window.prompt(
+      "Enter canvas name",
+      currentCanvasName || `Canvas ${new Date().toLocaleString()}`,
+    );
+
+    if (!name || !name.trim()) {
+      return;
+    }
+
+    const key = `canvas-${Date.now()}`;
+
     try {
-      await saveCanvas(key, payload);
-      await refreshBackendCanvases();
+      await saveCanvasWithIdAndName(key, name.trim());
     } catch (error) {
       console.error("Failed to create canvas", error);
       setErrorMessage("Failed to create canvas");
+    }
+  };
+  const handleSaveCurrentCanvas = async () => {
+    if (!excalidrawAPI) {
+      return;
+    }
+
+    if (!currentCanvasId) {
+      await handleCreateCanvas();
+      return;
+    }
+
+    const name = window.prompt(
+      "Update canvas name",
+      currentCanvasName || "Untitled Canvas",
+    );
+
+    if (!name || !name.trim()) {
+      return;
+    }
+
+    try {
+      await saveCanvasWithIdAndName(currentCanvasId, name.trim());
+    } catch (error) {
+      console.error("Failed to update canvas", error);
+      setErrorMessage("Failed to update canvas");
+    }
+  };
+  const handleSaveAsCanvas = async () => {
+    if (!excalidrawAPI) {
+      return;
+    }
+
+    const name = window.prompt(
+      "Save canvas as",
+      currentCanvasName
+        ? `${currentCanvasName} Copy`
+        : `Canvas ${new Date().toLocaleString()}`,
+    );
+
+    if (!name || !name.trim()) {
+      return;
+    }
+
+    const key = `canvas-${Date.now()}`;
+
+    try {
+      await saveCanvasWithIdAndName(key, name.trim());
+    } catch (error) {
+      console.error("Failed to save canvas as new", error);
+      setErrorMessage("Failed to save canvas as new");
     }
   };
   const handleOpenCanvas = async (canvasId: string) => {
@@ -892,6 +968,9 @@ const ExcalidrawWrapper = () => {
       if (!payload) {
         throw new Error("Canvas payload is empty or invalid");
       }
+
+      setCurrentCanvasId(canvas.id || canvasId);
+      setCurrentCanvasName(canvas.name || "");
 
       excalidrawAPI.updateScene({
         elements: payload.elements || [],
@@ -1131,6 +1210,8 @@ const ExcalidrawWrapper = () => {
             setBackendLoggedIn(false);
             setBackendDisplayName("");
             setBackendCanvases([]);
+            setCurrentCanvasId(null);
+            setCurrentCanvasName("");
           }}
         />
         <AppWelcomeScreen
@@ -1205,7 +1286,11 @@ const ExcalidrawWrapper = () => {
           backendLoggedIn={backendLoggedIn}
           backendCanvases={backendCanvases}
           backendLoadingCanvases={backendLoadingCanvases}
+          currentCanvasId={currentCanvasId}
+          currentCanvasName={currentCanvasName}
           onCreateCanvas={handleCreateCanvas}
+          onSaveCurrentCanvas={handleSaveCurrentCanvas}
+          onSaveAsCanvas={handleSaveAsCanvas}
           onOpenCanvas={handleOpenCanvas}
           onDeleteCanvas={handleDeleteCanvas}
         />
