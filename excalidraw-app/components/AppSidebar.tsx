@@ -47,14 +47,6 @@ export const AppSidebar = ({
   return (
     <DefaultSidebar>
       <DefaultSidebar.TabTriggers>
-        {backendLoggedIn && (
-          <Sidebar.TabTrigger
-            tab="canvases"
-            style={{ opacity: openSidebar?.tab === "canvases" ? 1 : 0.4 }}
-          >
-            📁
-          </Sidebar.TabTrigger>
-        )}
 
         <Sidebar.TabTrigger
           tab="comments"
