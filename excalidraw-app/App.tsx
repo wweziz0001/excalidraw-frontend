@@ -832,32 +832,59 @@ const ExcalidrawWrapper = () => {
         return "";
       }
 
-      const canvas = await exportToCanvas({
+      const sourceCanvas = await exportToCanvas({
         elements,
         appState: {
           ...excalidrawAPI.getAppState(),
           exportBackground: true,
+          viewBackgroundColor:
+            excalidrawAPI.getAppState().viewBackgroundColor || "#ffffff",
         },
         files: excalidrawAPI.getFiles(),
-        getDimensions: () => ({
-          width: 320,
-          height: 180,
-          scale: 1,
-        }),
       });
 
-      return canvas.toDataURL("image/png");
+      const thumbnailWidth = 320;
+      const thumbnailHeight = 180;
+      const padding = 12;
+
+      const output = document.createElement("canvas");
+      output.width = thumbnailWidth;
+      output.height = thumbnailHeight;
+
+      const ctx = output.getContext("2d");
+      if (!ctx) {
+        return sourceCanvas.toDataURL("image/png");
+      }
+
+      ctx.fillStyle =
+        excalidrawAPI.getAppState().viewBackgroundColor || "#ffffff";
+      ctx.fillRect(0, 0, thumbnailWidth, thumbnailHeight);
+
+      const scale = Math.min(
+        (thumbnailWidth - padding * 2) / sourceCanvas.width,
+        (thumbnailHeight - padding * 2) / sourceCanvas.height,
+      );
+
+      const drawWidth = sourceCanvas.width * scale;
+      const drawHeight = sourceCanvas.height * scale;
+      const dx = (thumbnailWidth - drawWidth) / 2;
+      const dy = (thumbnailHeight - drawHeight) / 2;
+
+      ctx.drawImage(sourceCanvas, dx, dy, drawWidth, drawHeight);
+
+      return output.toDataURL("image/png");
     } catch (error) {
       console.error("Failed to generate thumbnail", error);
       return "";
     }
   };
-  const saveCanvasWithIdAndName = async (canvasId: string, canvasName: string) => {
+  const saveCanvasWithIdAndName = async (
+    canvasId: string,
+    canvasName: string,
+  ) => {
     if (!excalidrawAPI) {
       return;
     }
-
-    excalidrawAPI.setName(canvasName);
 
     const elements = excalidrawAPI.getSceneElementsIncludingDeleted();
     const appState = excalidrawAPI.getAppState();
@@ -962,10 +989,6 @@ const ExcalidrawWrapper = () => {
       setCurrentCanvasName(canvas.name || "");
       setCanvasNameInput(canvas.name || "");
 
-      if (canvas.name) {
-        excalidrawAPI.setName(canvas.name);
-      }
-
       excalidrawAPI.updateScene({
         elements: payload.elements || [],
         appState: {
@@ -976,7 +999,7 @@ const ExcalidrawWrapper = () => {
       });
 
       if (payload.files) {
-        excalidrawAPI.addFiles(payload.files);
+        excalidrawAPI.addFiles(Object.values(payload.files));
       }
     } catch (error) {
       console.error("Failed to open canvas", error);
