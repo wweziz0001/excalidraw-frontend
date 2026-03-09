@@ -392,6 +392,7 @@ const ExcalidrawWrapper = () => {
   const [backendDisplayName, setBackendDisplayName] = useState("");
   const [currentCanvasId, setCurrentCanvasId] = useState<string | null>(null);
   const [currentCanvasName, setCurrentCanvasName] = useState("");
+  const [canvasNameInput, setCanvasNameInput] = useState("");
   const handleDeleteCanvas = async (canvasId: string) => {
     try {
       await deleteCanvas(canvasId);
@@ -879,6 +880,7 @@ const ExcalidrawWrapper = () => {
 
     setCurrentCanvasId(canvasId);
     setCurrentCanvasName(canvasName);
+    setCanvasNameInput(canvasName);
 
     await refreshBackendCanvases();
   };
@@ -887,19 +889,16 @@ const ExcalidrawWrapper = () => {
       return;
     }
 
-    const name = window.prompt(
-      "Enter canvas name",
-      currentCanvasName || `Canvas ${new Date().toLocaleString()}`,
-    );
-
-    if (!name || !name.trim()) {
+    const name = canvasNameInput.trim();
+    if (!name) {
+      setErrorMessage("Please enter a canvas name");
       return;
     }
 
     const key = `canvas-${Date.now()}`;
 
     try {
-      await saveCanvasWithIdAndName(key, name.trim());
+      await saveCanvasWithIdAndName(key, name);
     } catch (error) {
       console.error("Failed to create canvas", error);
       setErrorMessage("Failed to create canvas");
@@ -910,22 +909,19 @@ const ExcalidrawWrapper = () => {
       return;
     }
 
+    const name = canvasNameInput.trim();
+    if (!name) {
+      setErrorMessage("Please enter a canvas name");
+      return;
+    }
+
     if (!currentCanvasId) {
       await handleCreateCanvas();
       return;
     }
 
-    const name = window.prompt(
-      "Update canvas name",
-      currentCanvasName || "Untitled Canvas",
-    );
-
-    if (!name || !name.trim()) {
-      return;
-    }
-
     try {
-      await saveCanvasWithIdAndName(currentCanvasId, name.trim());
+      await saveCanvasWithIdAndName(currentCanvasId, name);
     } catch (error) {
       console.error("Failed to update canvas", error);
       setErrorMessage("Failed to update canvas");
@@ -936,21 +932,16 @@ const ExcalidrawWrapper = () => {
       return;
     }
 
-    const name = window.prompt(
-      "Save canvas as",
-      currentCanvasName
-        ? `${currentCanvasName} Copy`
-        : `Canvas ${new Date().toLocaleString()}`,
-    );
-
-    if (!name || !name.trim()) {
+    const name = canvasNameInput.trim();
+    if (!name) {
+      setErrorMessage("Please enter a canvas name");
       return;
     }
 
     const key = `canvas-${Date.now()}`;
 
     try {
-      await saveCanvasWithIdAndName(key, name.trim());
+      await saveCanvasWithIdAndName(key, name);
     } catch (error) {
       console.error("Failed to save canvas as new", error);
       setErrorMessage("Failed to save canvas as new");
@@ -971,6 +962,7 @@ const ExcalidrawWrapper = () => {
 
       setCurrentCanvasId(canvas.id || canvasId);
       setCurrentCanvasName(canvas.name || "");
+      setCanvasNameInput(canvas.name || "");
 
       excalidrawAPI.updateScene({
         elements: payload.elements || [],
@@ -987,6 +979,41 @@ const ExcalidrawWrapper = () => {
     } catch (error) {
       console.error("Failed to open canvas", error);
       setErrorMessage("Failed to open canvas");
+    }
+  };
+  const handleRenameCanvas = async (canvasId: string, newName: string) => {
+    if (!newName.trim()) {
+      setErrorMessage("Please enter a canvas name");
+      return;
+    }
+
+    try {
+      const canvas = await getCanvas(canvasId);
+      const payload = parseStoredCanvasData(canvas.data);
+
+      if (!payload) {
+        throw new Error("Canvas payload is empty or invalid");
+      }
+
+      await saveCanvas(canvasId, {
+        id: canvasId,
+        name: newName.trim(),
+        thumbnail: canvas.thumbnail || "",
+        data:
+          typeof canvas.data === "string"
+            ? canvas.data
+            : JSON.stringify(payload),
+      });
+
+      if (currentCanvasId === canvasId) {
+        setCurrentCanvasName(newName.trim());
+        setCanvasNameInput(newName.trim());
+      }
+
+      await refreshBackendCanvases();
+    } catch (error) {
+      console.error("Failed to rename canvas", error);
+      setErrorMessage("Failed to rename canvas");
     }
   };
   const [latestShareableLink, setLatestShareableLink] = useState<string | null>(
@@ -1212,6 +1239,7 @@ const ExcalidrawWrapper = () => {
             setBackendCanvases([]);
             setCurrentCanvasId(null);
             setCurrentCanvasName("");
+            setCanvasNameInput("");
           }}
         />
         <AppWelcomeScreen
@@ -1288,11 +1316,14 @@ const ExcalidrawWrapper = () => {
           backendLoadingCanvases={backendLoadingCanvases}
           currentCanvasId={currentCanvasId}
           currentCanvasName={currentCanvasName}
+          canvasNameInput={canvasNameInput}
+          onCanvasNameInputChange={setCanvasNameInput}
           onCreateCanvas={handleCreateCanvas}
           onSaveCurrentCanvas={handleSaveCurrentCanvas}
           onSaveAsCanvas={handleSaveAsCanvas}
           onOpenCanvas={handleOpenCanvas}
           onDeleteCanvas={handleDeleteCanvas}
+          onRenameCanvas={handleRenameCanvas}
         />
         {errorMessage && (
           <ErrorDialog onClose={() => setErrorMessage("")}>

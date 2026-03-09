@@ -6,6 +6,8 @@ import {
 import { LinkButton } from "@excalidraw/excalidraw/components/LinkButton";
 import { useUIAppState } from "@excalidraw/excalidraw/context/ui-appState";
 
+import { useState } from "react";
+
 import "./AppSidebar.scss";
 
 type AppSidebarProps = {
@@ -14,11 +16,14 @@ type AppSidebarProps = {
   backendLoadingCanvases: boolean;
   currentCanvasId: string | null;
   currentCanvasName: string;
+  canvasNameInput: string;
+  onCanvasNameInputChange: (value: string) => void;
   onCreateCanvas: () => void;
   onSaveCurrentCanvas: () => void;
   onSaveAsCanvas: () => void;
   onOpenCanvas: (canvasId: string) => void;
   onDeleteCanvas: (canvasId: string) => void;
+  onRenameCanvas: (canvasId: string, newName: string) => void;
 };
 
 export const AppSidebar = ({
@@ -27,14 +32,18 @@ export const AppSidebar = ({
   backendLoadingCanvases,
   currentCanvasId,
   currentCanvasName,
+  canvasNameInput,
+  onCanvasNameInputChange,
   onCreateCanvas,
   onSaveCurrentCanvas,
   onSaveAsCanvas,
   onOpenCanvas,
   onDeleteCanvas,
+  onRenameCanvas,
 }: AppSidebarProps) => {
   const { theme, openSidebar } = useUIAppState();
-
+  const [renamingCanvasId, setRenamingCanvasId] = useState<string | null>(null);
+  const [renamingValue, setRenamingValue] = useState("");
   return (
     <DefaultSidebar>
       <DefaultSidebar.TabTriggers>
@@ -79,10 +88,25 @@ export const AppSidebar = ({
               </div>
             )}
 
+            <input
+              type="text"
+              value={canvasNameInput}
+              onChange={(event) => onCanvasNameInputChange(event.target.value)}
+              placeholder="Canvas name"
+              style={{
+                width: "100%",
+                marginBottom: 10,
+                padding: "8px 10px",
+                border: "1px solid #ddd",
+                borderRadius: 6,
+                boxSizing: "border-box",
+              }}
+            />
+
             <div
               style={{
-                display: "flex",
-                flexDirection: "column",
+                display: "grid",
+                gridTemplateColumns: "1fr",
                 gap: 8,
                 marginBottom: 12,
               }}
@@ -182,7 +206,52 @@ export const AppSidebar = ({
                         </div>
                       </div>
 
-                      <div style={{ display: "flex", gap: 8 }}>
+                      {renamingCanvasId === canvas.id ? (
+                        <div
+                          style={{
+                            display: "flex",
+                            gap: 8,
+                            marginBottom: 8,
+                          }}
+                        >
+                          <input
+                            type="text"
+                            value={renamingValue}
+                            onChange={(event) =>
+                              setRenamingValue(event.target.value)
+                            }
+                            style={{
+                              flex: 1,
+                              padding: "6px 8px",
+                              border: "1px solid #ddd",
+                              borderRadius: 6,
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onRenameCanvas(canvas.id, renamingValue);
+                              setRenamingCanvasId(null);
+                              setRenamingValue("");
+                            }}
+                          >
+                            Save
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setRenamingCanvasId(null);
+                              setRenamingValue("");
+                            }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : null}
+
+                      <div
+                        style={{ display: "flex", gap: 8, flexWrap: "wrap" }}
+                      >
                         <button
                           type="button"
                           onClick={() => onOpenCanvas(canvas.id)}
@@ -195,6 +264,23 @@ export const AppSidebar = ({
                           }}
                         >
                           Open
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRenamingCanvasId(canvas.id);
+                            setRenamingValue(canvas.name);
+                          }}
+                          style={{
+                            flex: 1,
+                            border: "1px solid #ddd",
+                            borderRadius: 6,
+                            padding: "6px 10px",
+                            cursor: "pointer",
+                          }}
+                        >
+                          Rename
                         </button>
 
                         <button
