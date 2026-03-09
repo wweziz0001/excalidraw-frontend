@@ -45,9 +45,7 @@ export const AppMainMenu: React.FC<{
       <MainMenu.Separator />
       {props.backendLoggedIn ? (
         <>
-          <MainMenu.Item
-            icon={ExcalLogo}
-          >
+          <MainMenu.Item icon={ExcalLogo}>
             {props.backendDisplayName || "Signed in"}
           </MainMenu.Item>
           <MainMenu.Item

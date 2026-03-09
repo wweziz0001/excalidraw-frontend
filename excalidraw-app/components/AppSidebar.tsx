@@ -12,7 +12,11 @@ type AppSidebarProps = {
   backendLoggedIn: boolean;
   backendCanvases: Array<{ id: string; name: string; thumbnail?: string }>;
   backendLoadingCanvases: boolean;
+  currentCanvasId: string | null;
+  currentCanvasName: string;
   onCreateCanvas: () => void;
+  onSaveCurrentCanvas: () => void;
+  onSaveAsCanvas: () => void;
   onOpenCanvas: (canvasId: string) => void;
   onDeleteCanvas: (canvasId: string) => void;
 };
@@ -21,7 +25,11 @@ export const AppSidebar = ({
   backendLoggedIn,
   backendCanvases,
   backendLoadingCanvases,
+  currentCanvasId,
+  currentCanvasName,
   onCreateCanvas,
+  onSaveCurrentCanvas,
+  onSaveAsCanvas,
   onOpenCanvas,
   onDeleteCanvas,
 }: AppSidebarProps) => {
@@ -59,16 +67,50 @@ export const AppSidebar = ({
           <div className="app-sidebar-promo-container">
             <div className="app-sidebar-promo-text">My Canvases</div>
 
-            <button
-              type="button"
-              onClick={onCreateCanvas}
+            {currentCanvasId && (
+              <div
+                style={{
+                  marginBottom: 10,
+                  fontSize: 12,
+                  opacity: 0.7,
+                }}
+              >
+                Current: {currentCanvasName || currentCanvasId}
+              </div>
+            )}
+
+            <div
               style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 8,
                 marginBottom: 12,
-                width: "100%",
               }}
             >
-              New Canvas
-            </button>
+              <button
+                type="button"
+                onClick={onCreateCanvas}
+                style={{ width: "100%" }}
+              >
+                New Canvas
+              </button>
+
+              <button
+                type="button"
+                onClick={onSaveCurrentCanvas}
+                style={{ width: "100%" }}
+              >
+                Save Current Canvas
+              </button>
+
+              <button
+                type="button"
+                onClick={onSaveAsCanvas}
+                style={{ width: "100%" }}
+              >
+                Save As
+              </button>
+            </div>
 
             {backendLoadingCanvases ? (
               <div>Loading…</div>
@@ -125,8 +167,17 @@ export const AppSidebar = ({
                           </div>
                         )}
 
-                        <div style={{ fontWeight: 600 }}>{canvas.name}</div>
-                        <div style={{ fontSize: 12, opacity: 0.6, marginBottom: 8 }}>
+                        <div style={{ fontWeight: 600 }}>
+                          {canvas.name}
+                          {currentCanvasId === canvas.id ? " (Current)" : ""}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: 12,
+                            opacity: 0.6,
+                            marginBottom: 8,
+                          }}
+                        >
                           {canvas.id}
                         </div>
                       </div>
