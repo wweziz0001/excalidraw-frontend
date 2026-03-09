@@ -156,12 +156,11 @@ import { ExcalidrawPlusIframeExport } from "./ExcalidrawPlusIframeExport";
 
 import "./index.scss";
 
-import { ExcalidrawPlusPromoBanner } from "./components/ExcalidrawPlusPromoBanner";
 import { AppSidebar } from "./components/AppSidebar";
 
-import type { CollabAPI } from "./collab/Collab";
-
 import "./components/CanvasesPanel.scss";
+
+import type { CollabAPI } from "./collab/Collab";
 
 polyfill();
 
@@ -398,7 +397,8 @@ const ExcalidrawWrapper = () => {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [canvasNameInput, setCanvasNameInput] = useState("");
   const [isCanvasesPanelOpen, setIsCanvasesPanelOpen] = useState(false);
-  const [hasExcalidrawSidebarOpen, setHasExcalidrawSidebarOpen] = useState(false);
+  const [hasExcalidrawSidebarOpen, setHasExcalidrawSidebarOpen] =
+    useState(false);
 
   const isCollabDisabled = isRunningInIframe();
 
@@ -424,8 +424,12 @@ const ExcalidrawWrapper = () => {
   const canvasesPanelRef = useRef<HTMLDivElement | null>(null);
   const canvasesButtonRef = useRef<HTMLButtonElement | null>(null);
   const orderedBackendCanvases = [...backendCanvases].sort((a, b) => {
-    if (a.id === currentCanvasId) return -1;
-    if (b.id === currentCanvasId) return 1;
+    if (a.id === currentCanvasId) {
+      return -1;
+    }
+    if (b.id === currentCanvasId) {
+      return 1;
+    }
     return 0;
   });
   useEffect(() => {
@@ -534,15 +538,6 @@ const ExcalidrawWrapper = () => {
     setBackendDisplayName(loggedIn ? getBackendDisplayName() : "");
   }, []);
 
-  useEffect(() => {
-    if (!ENABLE_BACKEND_AUTH || !backendLoggedIn) {
-      return;
-    }
-
-    void refreshBackendCanvases();
-  }, [backendLoggedIn]);
-
-
   const [excalidrawAPI, excalidrawRefCallback] =
     useCallbackRefState<ExcalidrawImperativeAPI>();
 
@@ -561,16 +556,6 @@ const ExcalidrawWrapper = () => {
   });
 
   const [, forceRefresh] = useState(false);
-
-  useEffect(() => {
-    if (!backendLoggedIn || !excalidrawAPI) {
-      return;
-    }
-
-    if (!currentCanvasId) {
-      void createDraftCanvas();
-    }
-  }, [backendLoggedIn, excalidrawAPI, currentCanvasId]);
 
   useEffect(() => {
     if (isDevEnv()) {
@@ -864,65 +849,12 @@ const ExcalidrawWrapper = () => {
       setHasUnsavedChanges(true);
     }
   };
-  useEffect(() => {
-    if (
-      !backendLoggedIn ||
-      !currentCanvasId ||
-      !hasUnsavedChanges ||
-      !excalidrawAPI
-    ) {
-      return;
-    }
-
-    const timer = window.setTimeout(async () => {
-      try {
-        const elements = excalidrawAPI.getSceneElementsIncludingDeleted();
-        const appState = excalidrawAPI.getAppState();
-        const files = excalidrawAPI.getFiles();
-        const thumbnail = await generateCanvasThumbnail();
-
-        await saveCanvas(currentCanvasId, {
-          name: currentCanvasName || "مسودة",
-          thumbnail,
-          data: {
-            elements,
-            appState,
-            files,
-          },
-        });
-
-        setHasUnsavedChanges(false);
-
-        setBackendCanvases((prev) =>
-          prev.map((canvas) =>
-            canvas.id === currentCanvasId
-              ? {
-                  ...canvas,
-                  name: currentCanvasName || "مسودة",
-                  thumbnail,
-                }
-              : canvas,
-          ),
-        );
-      } catch (error) {
-        console.error("Failed to autosave canvas", error);
-      }
-    }, 1200);
-
-    return () => window.clearTimeout(timer);
-  }, [
-    backendLoggedIn,
-    currentCanvasId,
-    currentCanvasName,
-    hasUnsavedChanges,
-    excalidrawAPI,
-  ]);
   const decodeBase64Utf8 = (value: string) => {
     const binary = atob(value);
     const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
     return new TextDecoder("utf-8").decode(bytes);
   };
-  const refreshBackendCanvases = async () => {
+  const refreshBackendCanvases = useCallback(async () => {
     try {
       setBackendLoadingCanvases(true);
       const canvases = await listCanvases();
@@ -939,56 +871,8 @@ const ExcalidrawWrapper = () => {
     } finally {
       setBackendLoadingCanvases(false);
     }
-  };
-  const createDraftCanvas = async () => {
-    if (!excalidrawAPI) {
-      return;
-    }
-
-    const draftId = `draft-${Date.now()}`;
-
-    await saveCanvas(draftId, {
-      name: "مسودة",
-      thumbnail: "",
-      data: {
-        elements: [],
-        appState: excalidrawAPI.getAppState(),
-        files: {},
-      },
-    });
-
-    setCurrentCanvasId(draftId);
-    setCurrentCanvasName("مسودة");
-    setCanvasNameInput("مسودة");
-    setCurrentCanvasIsDraft(true);
-
-    await refreshBackendCanvases();
-  };
-  const parseStoredCanvasData = (rawData: unknown) => {
-    if (!rawData) {
-      return null;
-    }
-
-    if (typeof rawData === "string") {
-      try {
-        return JSON.parse(rawData);
-      } catch {
-        try {
-          return JSON.parse(decodeBase64Utf8(rawData));
-        } catch (error) {
-          console.error("Failed to parse stored canvas data", error);
-          return null;
-        }
-      }
-    }
-
-    if (typeof rawData === "object") {
-      return rawData;
-    }
-
-    return null;
-  };
-  const generateCanvasThumbnail = async () => {
+  }, []);
+  const generateCanvasThumbnail = useCallback(async () => {
     if (!excalidrawAPI) {
       return "";
     }
@@ -1047,6 +931,54 @@ const ExcalidrawWrapper = () => {
       console.error("Failed to generate thumbnail", error);
       return "";
     }
+  }, [excalidrawAPI]);
+  const createDraftCanvas = useCallback(async () => {
+    if (!excalidrawAPI) {
+      return;
+    }
+
+    const draftId = `draft-${Date.now()}`;
+
+    await saveCanvas(draftId, {
+      name: "مسودة",
+      thumbnail: "",
+      data: {
+        elements: [],
+        appState: excalidrawAPI.getAppState(),
+        files: {},
+      },
+    });
+
+    setCurrentCanvasId(draftId);
+    setCurrentCanvasName("مسودة");
+    setCanvasNameInput("مسودة");
+    setCurrentCanvasIsDraft(true);
+
+    await refreshBackendCanvases();
+  }, [excalidrawAPI, refreshBackendCanvases]);
+  const parseStoredCanvasData = (rawData: unknown) => {
+    if (!rawData) {
+      return null;
+    }
+
+    if (typeof rawData === "string") {
+      try {
+        return JSON.parse(rawData);
+      } catch {
+        try {
+          return JSON.parse(decodeBase64Utf8(rawData));
+        } catch (error) {
+          console.error("Failed to parse stored canvas data", error);
+          return null;
+        }
+      }
+    }
+
+    if (typeof rawData === "object") {
+      return rawData;
+    }
+
+    return null;
   };
   const saveCanvasWithIdAndName = async (
     canvasId: string,
@@ -1306,6 +1238,76 @@ const ExcalidrawWrapper = () => {
     null,
   );
 
+  useEffect(() => {
+    if (!ENABLE_BACKEND_AUTH || !backendLoggedIn) {
+      return;
+    }
+
+    void refreshBackendCanvases();
+  }, [backendLoggedIn, refreshBackendCanvases]);
+  useEffect(() => {
+    if (!backendLoggedIn || !excalidrawAPI) {
+      return;
+    }
+
+    if (!currentCanvasId) {
+      void createDraftCanvas();
+    }
+  }, [backendLoggedIn, excalidrawAPI, currentCanvasId, createDraftCanvas]);
+  useEffect(() => {
+    if (
+      !backendLoggedIn ||
+      !currentCanvasId ||
+      !hasUnsavedChanges ||
+      !excalidrawAPI
+    ) {
+      return;
+    }
+
+    const timer = window.setTimeout(async () => {
+      try {
+        const elements = excalidrawAPI.getSceneElementsIncludingDeleted();
+        const appState = excalidrawAPI.getAppState();
+        const files = excalidrawAPI.getFiles();
+        const thumbnail = await generateCanvasThumbnail();
+
+        await saveCanvas(currentCanvasId, {
+          name: currentCanvasName || "مسودة",
+          thumbnail,
+          data: {
+            elements,
+            appState,
+            files,
+          },
+        });
+
+        setHasUnsavedChanges(false);
+
+        setBackendCanvases((prev) =>
+          prev.map((canvas) =>
+            canvas.id === currentCanvasId
+              ? {
+                  ...canvas,
+                  name: currentCanvasName || "مسودة",
+                  thumbnail,
+                }
+              : canvas,
+          ),
+        );
+      } catch (error) {
+        console.error("Failed to autosave canvas", error);
+      }
+    }, 1200);
+
+    return () => window.clearTimeout(timer);
+  }, [
+    backendLoggedIn,
+    currentCanvasId,
+    currentCanvasName,
+    hasUnsavedChanges,
+    excalidrawAPI,
+    generateCanvasThumbnail,
+  ]);
   const onExportToBackend = async (
     exportedElements: readonly NonDeletedExcalidrawElement[],
     appState: Partial<AppState>,
@@ -1484,7 +1486,6 @@ const ExcalidrawWrapper = () => {
 
           return (
             <div className="excalidraw-ui-top-right">
-
               {collabError.message && <CollabError collabError={collabError} />}
 
               {backendLoggedIn && (
@@ -1498,138 +1499,139 @@ const ExcalidrawWrapper = () => {
                   <span>Canvases</span>
                 </button>
               )}
-                {backendLoggedIn && isCanvasesPanelOpen && (
-                  <div
-                    ref={canvasesPanelRef}
-                    className={`CanvasesPanel ${
-                      hasExcalidrawSidebarOpen ? "CanvasesPanel--withSidebar" : ""
-                    }`}
-                  >
-                    <div className="CanvasesPanel__header">
-                      <div className="CanvasesPanel__title">My Canvases</div>
-                      <button
-                        type="button"
-                        className="CanvasesPanel__close"
-                        onClick={() => setIsCanvasesPanelOpen(false)}
-                      >
-                        Close
-                      </button>
-                    </div>
-
-                    {currentCanvasId && (
-                      <div className="CanvasesPanel__current">
-                        Current: {currentCanvasName || currentCanvasId}
-                      </div>
-                    )}
-
-                    {currentCanvasIsDraft && (
-                      <div className="CanvasesPanel__draftWarning">
-                        اللوحة الحالية هي مسودة. إذا انتقلت إلى لوحة محفوظة، سيتم حذف هذه المسودة.
-                      </div>
-                    )}
-
-                    <input
-                      type="text"
-                      value={canvasNameInput}
-                      onChange={(event) => setCanvasNameInput(event.target.value)}
-                      placeholder="Canvas name"
-                      className="CanvasesPanel__input"
-                    />
-
-                    <div className="CanvasesPanel__actions">
-                      <button
-                        type="button"
-                        onClick={handleCreateCanvas}
-                        className="CanvasesPanelPrimaryButton"
-                      >
-                        New Canvas
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={handleSaveCurrentCanvas}
-                        className="CanvasesPanelPrimaryButton"
-                      >
-                        Save Current Canvas
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={handleSaveAsCanvas}
-                        className="CanvasesPanelPrimaryButton"
-                      >
-                        Save As
-                      </button>
-                    </div>
-
-                    {backendLoadingCanvases ? (
-                      <div className="CanvasesPanel__loading">Loading…</div>
-                    ) : backendCanvases.length === 0 ? (
-                      <div className="CanvasesPanel__empty">No canvases yet</div>
-                    ) : (
-                      <ul className="CanvasesPanel__list">
-                        {orderedBackendCanvases.map((canvas) => (
-                          <li key={canvas.id} className="CanvasCard">
-                            <div
-                              className="CanvasCard__preview"
-                              onClick={() => handleOpenCanvas(canvas.id)}
-                            >
-                              {canvas.thumbnail ? (
-                                <img
-                                  src={canvas.thumbnail}
-                                  alt={canvas.name}
-                                  className="CanvasCard__thumbnail"
-                                />
-                              ) : (
-                                <div className="CanvasCard__thumbnailPlaceholder">
-                                  No thumbnail
-                                </div>
-                              )}
-
-                              <div
-                                className={`CanvasCard__name ${
-                                  currentCanvasId === canvas.id
-                                    ? "CanvasCard__name--current"
-                                    : ""
-                                }`}
-                              >
-                                {canvas.name}
-                              </div>
-
-                              <div className="CanvasCard__meta">{canvas.id}</div>
-                            </div>
-
-                            <div className="CanvasCard__toolbar">
-                              <button
-                                type="button"
-                                onClick={() => handleOpenCanvas(canvas.id)}
-                                className="CanvasCard__action"
-                              >
-                                Open
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={() => handleDuplicateCanvas(canvas.id)}
-                                className="CanvasCard__action"
-                              >
-                                Duplicate
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteCanvas(canvas.id)}
-                                className="CanvasCard__action CanvasCard__action--danger"
-                              >
-                                Delete
-                              </button>
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
+              {backendLoggedIn && isCanvasesPanelOpen && (
+                <div
+                  ref={canvasesPanelRef}
+                  className={`CanvasesPanel ${
+                    hasExcalidrawSidebarOpen ? "CanvasesPanel--withSidebar" : ""
+                  }`}
+                >
+                  <div className="CanvasesPanel__header">
+                    <div className="CanvasesPanel__title">My Canvases</div>
+                    <button
+                      type="button"
+                      className="CanvasesPanel__close"
+                      onClick={() => setIsCanvasesPanelOpen(false)}
+                    >
+                      Close
+                    </button>
                   </div>
-                )}
+
+                  {currentCanvasId && (
+                    <div className="CanvasesPanel__current">
+                      Current: {currentCanvasName || currentCanvasId}
+                    </div>
+                  )}
+
+                  {currentCanvasIsDraft && (
+                    <div className="CanvasesPanel__draftWarning">
+                      اللوحة الحالية هي مسودة. إذا انتقلت إلى لوحة محفوظة، سيتم
+                      حذف هذه المسودة.
+                    </div>
+                  )}
+
+                  <input
+                    type="text"
+                    value={canvasNameInput}
+                    onChange={(event) => setCanvasNameInput(event.target.value)}
+                    placeholder="Canvas name"
+                    className="CanvasesPanel__input"
+                  />
+
+                  <div className="CanvasesPanel__actions">
+                    <button
+                      type="button"
+                      onClick={handleCreateCanvas}
+                      className="CanvasesPanelPrimaryButton"
+                    >
+                      New Canvas
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleSaveCurrentCanvas}
+                      className="CanvasesPanelPrimaryButton"
+                    >
+                      Save Current Canvas
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleSaveAsCanvas}
+                      className="CanvasesPanelPrimaryButton"
+                    >
+                      Save As
+                    </button>
+                  </div>
+
+                  {backendLoadingCanvases ? (
+                    <div className="CanvasesPanel__loading">Loading…</div>
+                  ) : backendCanvases.length === 0 ? (
+                    <div className="CanvasesPanel__empty">No canvases yet</div>
+                  ) : (
+                    <ul className="CanvasesPanel__list">
+                      {orderedBackendCanvases.map((canvas) => (
+                        <li key={canvas.id} className="CanvasCard">
+                          <div
+                            className="CanvasCard__preview"
+                            onClick={() => handleOpenCanvas(canvas.id)}
+                          >
+                            {canvas.thumbnail ? (
+                              <img
+                                src={canvas.thumbnail}
+                                alt={canvas.name}
+                                className="CanvasCard__thumbnail"
+                              />
+                            ) : (
+                              <div className="CanvasCard__thumbnailPlaceholder">
+                                No thumbnail
+                              </div>
+                            )}
+
+                            <div
+                              className={`CanvasCard__name ${
+                                currentCanvasId === canvas.id
+                                  ? "CanvasCard__name--current"
+                                  : ""
+                              }`}
+                            >
+                              {canvas.name}
+                            </div>
+
+                            <div className="CanvasCard__meta">{canvas.id}</div>
+                          </div>
+
+                          <div className="CanvasCard__toolbar">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenCanvas(canvas.id)}
+                              className="CanvasCard__action"
+                            >
+                              Open
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleDuplicateCanvas(canvas.id)}
+                              className="CanvasCard__action"
+                            >
+                              Duplicate
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteCanvas(canvas.id)}
+                              className="CanvasCard__action CanvasCard__action--danger"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
               {!isCollabDisabled && collabAPI && (
                 <LiveCollaborationTrigger
                   isCollaborating={isCollaborating}
