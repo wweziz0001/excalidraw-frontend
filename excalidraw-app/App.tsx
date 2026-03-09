@@ -394,6 +394,8 @@ const ExcalidrawWrapper = () => {
   const [backendDisplayName, setBackendDisplayName] = useState("");
   const [currentCanvasId, setCurrentCanvasId] = useState<string | null>(null);
   const [currentCanvasName, setCurrentCanvasName] = useState("");
+  const [currentCanvasIsDraft, setCurrentCanvasIsDraft] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [canvasNameInput, setCanvasNameInput] = useState("");
   const [isCanvasesPanelOpen, setIsCanvasesPanelOpen] = useState(false);
   const [hasExcalidrawSidebarOpen, setHasExcalidrawSidebarOpen] = useState(false);
@@ -421,7 +423,11 @@ const ExcalidrawWrapper = () => {
 
   const canvasesPanelRef = useRef<HTMLDivElement | null>(null);
   const canvasesButtonRef = useRef<HTMLButtonElement | null>(null);
-
+  const orderedBackendCanvases = [...backendCanvases].sort((a, b) => {
+    if (a.id === currentCanvasId) return -1;
+    if (b.id === currentCanvasId) return 1;
+    return 0;
+  });
   useEffect(() => {
     if (!isCanvasesPanelOpen) {
       return;
@@ -536,6 +542,7 @@ const ExcalidrawWrapper = () => {
     void refreshBackendCanvases();
   }, [backendLoggedIn]);
 
+
   const [excalidrawAPI, excalidrawRefCallback] =
     useCallbackRefState<ExcalidrawImperativeAPI>();
 
@@ -554,6 +561,16 @@ const ExcalidrawWrapper = () => {
   });
 
   const [, forceRefresh] = useState(false);
+
+  useEffect(() => {
+    if (!backendLoggedIn || !excalidrawAPI) {
+      return;
+    }
+
+    if (!currentCanvasId) {
+      void createDraftCanvas();
+    }
+  }, [backendLoggedIn, excalidrawAPI, currentCanvasId]);
 
   useEffect(() => {
     if (isDevEnv()) {
@@ -842,45 +859,68 @@ const ExcalidrawWrapper = () => {
         window.devicePixelRatio,
       );
     }
+
+    if (backendLoggedIn && currentCanvasId) {
+      setHasUnsavedChanges(true);
+    }
   };
+  useEffect(() => {
+    if (
+      !backendLoggedIn ||
+      !currentCanvasId ||
+      !hasUnsavedChanges ||
+      !excalidrawAPI
+    ) {
+      return;
+    }
+
+    const timer = window.setTimeout(async () => {
+      try {
+        const elements = excalidrawAPI.getSceneElementsIncludingDeleted();
+        const appState = excalidrawAPI.getAppState();
+        const files = excalidrawAPI.getFiles();
+        const thumbnail = await generateCanvasThumbnail();
+
+        await saveCanvas(currentCanvasId, {
+          name: currentCanvasName || "مسودة",
+          thumbnail,
+          data: {
+            elements,
+            appState,
+            files,
+          },
+        });
+
+        setHasUnsavedChanges(false);
+
+        setBackendCanvases((prev) =>
+          prev.map((canvas) =>
+            canvas.id === currentCanvasId
+              ? {
+                  ...canvas,
+                  name: currentCanvasName || "مسودة",
+                  thumbnail,
+                }
+              : canvas,
+          ),
+        );
+      } catch (error) {
+        console.error("Failed to autosave canvas", error);
+      }
+    }, 1200);
+
+    return () => window.clearTimeout(timer);
+  }, [
+    backendLoggedIn,
+    currentCanvasId,
+    currentCanvasName,
+    hasUnsavedChanges,
+    excalidrawAPI,
+  ]);
   const decodeBase64Utf8 = (value: string) => {
     const binary = atob(value);
     const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
     return new TextDecoder("utf-8").decode(bytes);
-  };
-  const handleDeleteCanvas = async (canvasId: string) => {
-    try {
-      await deleteCanvas(canvasId);
-      await refreshBackendCanvases();
-    } catch (error) {
-      console.error("Failed to delete canvas", error);
-      setErrorMessage("Failed to delete canvas");
-    }
-  };
-  const handleDuplicateCanvas = async (canvasId: string) => {
-    try {
-      const sourceCanvas = await getCanvas(canvasId);
-
-      if (!sourceCanvas?.data) {
-        throw new Error("Source canvas payload is empty");
-      }
-
-      const newId = `canvas-${Date.now()}`;
-      const newName = sourceCanvas.name
-        ? `${sourceCanvas.name} Copy`
-        : `Canvas ${new Date().toLocaleString()}`;
-
-      await saveCanvas(newId, {
-        name: newName,
-        thumbnail: sourceCanvas.thumbnail || "",
-        data: sourceCanvas.data,
-      });
-
-      await refreshBackendCanvases();
-    } catch (error) {
-      console.error("Failed to duplicate canvas", error);
-      setErrorMessage("Failed to duplicate canvas");
-    }
   };
   const refreshBackendCanvases = async () => {
     try {
@@ -899,6 +939,30 @@ const ExcalidrawWrapper = () => {
     } finally {
       setBackendLoadingCanvases(false);
     }
+  };
+  const createDraftCanvas = async () => {
+    if (!excalidrawAPI) {
+      return;
+    }
+
+    const draftId = `draft-${Date.now()}`;
+
+    await saveCanvas(draftId, {
+      name: "مسودة",
+      thumbnail: "",
+      data: {
+        elements: [],
+        appState: excalidrawAPI.getAppState(),
+        files: {},
+      },
+    });
+
+    setCurrentCanvasId(draftId);
+    setCurrentCanvasName("مسودة");
+    setCanvasNameInput("مسودة");
+    setCurrentCanvasIsDraft(true);
+
+    await refreshBackendCanvases();
   };
   const parseStoredCanvasData = (rawData: unknown) => {
     if (!rawData) {
@@ -924,7 +988,6 @@ const ExcalidrawWrapper = () => {
 
     return null;
   };
-
   const generateCanvasThumbnail = async () => {
     if (!excalidrawAPI) {
       return "";
@@ -1021,43 +1084,64 @@ const ExcalidrawWrapper = () => {
       return;
     }
 
-    const name = canvasNameInput.trim();
-    if (!name) {
-      setErrorMessage("Please enter a canvas name");
-      return;
+    if (currentCanvasIsDraft && currentCanvasId) {
+      const confirmed = window.confirm(
+        "لديك مسودة حالية. سيتم حذفها وإنشاء مسودة جديدة. هل تريد المتابعة؟",
+      );
+
+      if (!confirmed) {
+        return;
+      }
+
+      await deleteCanvas(currentCanvasId);
+    } else if (currentCanvasId) {
+      await handleSaveCurrentCanvas();
     }
 
-    const key = `canvas-${Date.now()}`;
+    excalidrawAPI.updateScene({
+      elements: [],
+      appState: {
+        ...getDefaultAppState(),
+        collaborators: new Map(),
+      },
+      captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+    });
 
-    try {
-      await saveCanvasWithIdAndName(key, name);
-    } catch (error) {
-      console.error("Failed to create canvas", error);
-      setErrorMessage("Failed to create canvas");
-    }
+    setCurrentCanvasId(null);
+    setCurrentCanvasName("");
+    setCanvasNameInput("");
+    setCurrentCanvasIsDraft(false);
+    setHasUnsavedChanges(false);
+
+    await createDraftCanvas();
   };
   const handleSaveCurrentCanvas = async () => {
-    if (!excalidrawAPI) {
+    if (!excalidrawAPI || !currentCanvasId) {
       return;
     }
 
-    const name = canvasNameInput.trim();
-    if (!name) {
-      setErrorMessage("Please enter a canvas name");
+    if (currentCanvasIsDraft) {
+      const name = window.prompt("أدخل اسم اللوحة", "");
+      if (!name || !name.trim()) {
+        return;
+      }
+
+      const finalName = name.trim();
+
+      await saveCanvasWithIdAndName(currentCanvasId, finalName);
+      setCurrentCanvasName(finalName);
+      setCanvasNameInput(finalName);
+      setCurrentCanvasIsDraft(false);
+      setHasUnsavedChanges(false);
       return;
     }
 
-    if (!currentCanvasId) {
-      await handleCreateCanvas();
-      return;
-    }
+    const finalName = canvasNameInput.trim() || currentCanvasName || "Untitled";
 
-    try {
-      await saveCanvasWithIdAndName(currentCanvasId, name);
-    } catch (error) {
-      console.error("Failed to update canvas", error);
-      setErrorMessage("Failed to update canvas");
-    }
+    await saveCanvasWithIdAndName(currentCanvasId, finalName);
+    setCurrentCanvasName(finalName);
+    setCanvasNameInput(finalName);
+    setHasUnsavedChanges(false);
   };
   const handleSaveAsCanvas = async () => {
     if (!excalidrawAPI) {
@@ -1085,6 +1169,26 @@ const ExcalidrawWrapper = () => {
     }
 
     try {
+      if (currentCanvasId && currentCanvasId !== canvasId) {
+        if (currentCanvasIsDraft) {
+          const confirmed = window.confirm(
+            "اللوحة الحالية هي مسودة. عند الانتقال إلى لوحة محفوظة سيتم حذف هذه المسودة. هل تريد المتابعة؟",
+          );
+
+          if (!confirmed) {
+            return;
+          }
+
+          await deleteCanvas(currentCanvasId);
+          setCurrentCanvasId(null);
+          setCurrentCanvasName("");
+          setCanvasNameInput("");
+          setCurrentCanvasIsDraft(false);
+        } else {
+          await handleSaveCurrentCanvas();
+        }
+      }
+
       const canvas = await getCanvas(canvasId);
       const payload = canvas.data;
 
@@ -1095,6 +1199,8 @@ const ExcalidrawWrapper = () => {
       setCurrentCanvasId(canvas.id || canvasId);
       setCurrentCanvasName(canvas.name || "");
       setCanvasNameInput(canvas.name || "");
+      setCurrentCanvasIsDraft(canvas.name === "مسودة");
+      setHasUnsavedChanges(false);
 
       excalidrawAPI.updateScene({
         elements: payload.elements || [],
@@ -1146,6 +1252,54 @@ const ExcalidrawWrapper = () => {
     } catch (error) {
       console.error("Failed to rename canvas", error);
       setErrorMessage("Failed to rename canvas");
+    }
+  };
+  const handleDeleteCanvas = async (canvasId: string) => {
+    const confirmed = window.confirm("هل أنت متأكد من حذف هذه اللوحة؟");
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      await deleteCanvas(canvasId);
+
+      if (currentCanvasId === canvasId) {
+        setCurrentCanvasId(null);
+        setCurrentCanvasName("");
+        setCanvasNameInput("");
+        setCurrentCanvasIsDraft(false);
+        setHasUnsavedChanges(false);
+      }
+
+      await refreshBackendCanvases();
+    } catch (error) {
+      console.error("Failed to delete canvas", error);
+      setErrorMessage("Failed to delete canvas");
+    }
+  };
+  const handleDuplicateCanvas = async (canvasId: string) => {
+    try {
+      const sourceCanvas = await getCanvas(canvasId);
+
+      if (!sourceCanvas?.data) {
+        throw new Error("Source canvas payload is empty");
+      }
+
+      const newId = `canvas-${Date.now()}`;
+      const newName = sourceCanvas.name
+        ? `${sourceCanvas.name} Copy`
+        : `Canvas ${new Date().toLocaleString()}`;
+
+      await saveCanvas(newId, {
+        name: newName,
+        thumbnail: sourceCanvas.thumbnail || "",
+        data: sourceCanvas.data,
+      });
+
+      await refreshBackendCanvases();
+    } catch (error) {
+      console.error("Failed to duplicate canvas", error);
+      setErrorMessage("Failed to duplicate canvas");
     }
   };
   const [latestShareableLink, setLatestShareableLink] = useState<string | null>(
@@ -1368,6 +1522,12 @@ const ExcalidrawWrapper = () => {
                       </div>
                     )}
 
+                    {currentCanvasIsDraft && (
+                      <div className="CanvasesPanel__draftWarning">
+                        اللوحة الحالية هي مسودة. إذا انتقلت إلى لوحة محفوظة، سيتم حذف هذه المسودة.
+                      </div>
+                    )}
+
                     <input
                       type="text"
                       value={canvasNameInput}
@@ -1408,7 +1568,7 @@ const ExcalidrawWrapper = () => {
                       <div className="CanvasesPanel__empty">No canvases yet</div>
                     ) : (
                       <ul className="CanvasesPanel__list">
-                        {backendCanvases.map((canvas) => (
+                        {orderedBackendCanvases.map((canvas) => (
                           <li key={canvas.id} className="CanvasCard">
                             <div
                               className="CanvasCard__preview"
@@ -1459,7 +1619,7 @@ const ExcalidrawWrapper = () => {
                               <button
                                 type="button"
                                 onClick={() => handleDeleteCanvas(canvas.id)}
-                                className="CanvasCard__action"
+                                className="CanvasCard__action CanvasCard__action--danger"
                               >
                                 Delete
                               </button>
@@ -1507,6 +1667,8 @@ const ExcalidrawWrapper = () => {
             setCurrentCanvasId(null);
             setCurrentCanvasName("");
             setCanvasNameInput("");
+            setCurrentCanvasIsDraft(false);
+            setHasUnsavedChanges(false);
           }}
         />
         <AppWelcomeScreen
