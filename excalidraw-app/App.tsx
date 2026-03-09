@@ -161,6 +161,8 @@ import { AppSidebar } from "./components/AppSidebar";
 
 import type { CollabAPI } from "./collab/Collab";
 
+import "./components/CanvasesPanel.scss";
+
 polyfill();
 
 window.EXCALIDRAW_THROTTLE_RENDER = true;
@@ -393,33 +395,9 @@ const ExcalidrawWrapper = () => {
   const [currentCanvasId, setCurrentCanvasId] = useState<string | null>(null);
   const [currentCanvasName, setCurrentCanvasName] = useState("");
   const [canvasNameInput, setCanvasNameInput] = useState("");
-  const handleDeleteCanvas = async (canvasId: string) => {
-    try {
-      await deleteCanvas(canvasId);
-      await refreshBackendCanvases();
-    } catch (error) {
-      console.error("Failed to delete canvas", error);
-      setErrorMessage("Failed to delete canvas");
-    }
-  };
-  const refreshBackendCanvases = async () => {
-    try {
-      setBackendLoadingCanvases(true);
-      const canvases = await listCanvases();
+  const [isCanvasesPanelOpen, setIsCanvasesPanelOpen] = useState(false);
+  const [hasExcalidrawSidebarOpen, setHasExcalidrawSidebarOpen] = useState(false);
 
-      setBackendCanvases(
-        canvases.map((item) => ({
-          id: item.id,
-          name: item.name || item.id,
-          thumbnail: item.thumbnail,
-        })),
-      );
-    } catch (error) {
-      console.error("Failed to load backend canvases", error);
-    } finally {
-      setBackendLoadingCanvases(false);
-    }
-  };
   const isCollabDisabled = isRunningInIframe();
 
   const { editorTheme, appTheme, setAppTheme } = useHandleAppTheme();
@@ -440,6 +418,84 @@ const ExcalidrawWrapper = () => {
   }
 
   const debugCanvasRef = useRef<HTMLCanvasElement>(null);
+
+  const canvasesPanelRef = useRef<HTMLDivElement | null>(null);
+  const canvasesButtonRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    if (!isCanvasesPanelOpen) {
+      return;
+    }
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+
+      if (!target) {
+        return;
+      }
+
+      const clickedInsidePanel =
+        canvasesPanelRef.current?.contains(target) ?? false;
+
+      const clickedOnButton =
+        canvasesButtonRef.current?.contains(target) ?? false;
+
+      if (!clickedInsidePanel && !clickedOnButton) {
+        setIsCanvasesPanelOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+    };
+  }, [isCanvasesPanelOpen]);
+
+  useEffect(() => {
+    const checkSidebar = () => {
+      const sidebar =
+        document.querySelector(".DefaultSidebar") ||
+        document.querySelector('[data-testid="default-sidebar"]') ||
+        document.querySelector(".sidebar");
+
+      if (!sidebar) {
+        setHasExcalidrawSidebarOpen(false);
+        return;
+      }
+
+      const styles = window.getComputedStyle(sidebar as Element);
+      const rect = (sidebar as Element).getBoundingClientRect();
+
+      const isVisible =
+        styles.display !== "none" &&
+        styles.visibility !== "hidden" &&
+        rect.width > 0 &&
+        rect.height > 0;
+
+      setHasExcalidrawSidebarOpen(isVisible);
+    };
+
+    checkSidebar();
+
+    const observer = new MutationObserver(() => {
+      checkSidebar();
+    });
+
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["class", "style", "data-state", "aria-hidden"],
+    });
+
+    window.addEventListener("resize", checkSidebar);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", checkSidebar);
+    };
+  }, []);
 
   useEffect(() => {
     trackEvent("load", "frame", getFrame());
@@ -792,7 +848,58 @@ const ExcalidrawWrapper = () => {
     const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
     return new TextDecoder("utf-8").decode(bytes);
   };
+  const handleDeleteCanvas = async (canvasId: string) => {
+    try {
+      await deleteCanvas(canvasId);
+      await refreshBackendCanvases();
+    } catch (error) {
+      console.error("Failed to delete canvas", error);
+      setErrorMessage("Failed to delete canvas");
+    }
+  };
+  const handleDuplicateCanvas = async (canvasId: string) => {
+    try {
+      const sourceCanvas = await getCanvas(canvasId);
 
+      if (!sourceCanvas?.data) {
+        throw new Error("Source canvas payload is empty");
+      }
+
+      const newId = `canvas-${Date.now()}`;
+      const newName = sourceCanvas.name
+        ? `${sourceCanvas.name} Copy`
+        : `Canvas ${new Date().toLocaleString()}`;
+
+      await saveCanvas(newId, {
+        name: newName,
+        thumbnail: sourceCanvas.thumbnail || "",
+        data: sourceCanvas.data,
+      });
+
+      await refreshBackendCanvases();
+    } catch (error) {
+      console.error("Failed to duplicate canvas", error);
+      setErrorMessage("Failed to duplicate canvas");
+    }
+  };
+  const refreshBackendCanvases = async () => {
+    try {
+      setBackendLoadingCanvases(true);
+      const canvases = await listCanvases();
+
+      setBackendCanvases(
+        canvases.map((item) => ({
+          id: item.id,
+          name: item.name || item.id,
+          thumbnail: item.thumbnail,
+        })),
+      );
+    } catch (error) {
+      console.error("Failed to load backend canvases", error);
+    } finally {
+      setBackendLoadingCanvases(false);
+    }
+  };
   const parseStoredCanvasData = (rawData: unknown) => {
     if (!rawData) {
       return null;
@@ -1217,26 +1324,161 @@ const ExcalidrawWrapper = () => {
         autoFocus={true}
         theme={editorTheme}
         renderTopRightUI={(isMobile) => {
-          if (isMobile || !collabAPI || isCollabDisabled) {
+          if (isMobile) {
             return null;
           }
 
           return (
             <div className="excalidraw-ui-top-right">
-              {excalidrawAPI?.getEditorInterface().formFactor === "desktop" && (
-                <ExcalidrawPlusPromoBanner
-                  isSignedIn={isExcalidrawPlusSignedUser}
-                />
-              )}
 
               {collabError.message && <CollabError collabError={collabError} />}
-              <LiveCollaborationTrigger
-                isCollaborating={isCollaborating}
-                onSelect={() =>
-                  setShareDialogState({ isOpen: true, type: "share" })
-                }
-                editorInterface={editorInterface}
-              />
+
+              {backendLoggedIn && (
+                <button
+                  ref={canvasesButtonRef}
+                  type="button"
+                  onClick={() => setIsCanvasesPanelOpen((prev) => !prev)}
+                  className="CanvasesPanelButton"
+                >
+                  <span aria-hidden="true">📁</span>
+                  <span>Canvases</span>
+                </button>
+              )}
+                {backendLoggedIn && isCanvasesPanelOpen && (
+                  <div
+                    ref={canvasesPanelRef}
+                    className={`CanvasesPanel ${
+                      hasExcalidrawSidebarOpen ? "CanvasesPanel--withSidebar" : ""
+                    }`}
+                  >
+                    <div className="CanvasesPanel__header">
+                      <div className="CanvasesPanel__title">My Canvases</div>
+                      <button
+                        type="button"
+                        className="CanvasesPanel__close"
+                        onClick={() => setIsCanvasesPanelOpen(false)}
+                      >
+                        Close
+                      </button>
+                    </div>
+
+                    {currentCanvasId && (
+                      <div className="CanvasesPanel__current">
+                        Current: {currentCanvasName || currentCanvasId}
+                      </div>
+                    )}
+
+                    <input
+                      type="text"
+                      value={canvasNameInput}
+                      onChange={(event) => setCanvasNameInput(event.target.value)}
+                      placeholder="Canvas name"
+                      className="CanvasesPanel__input"
+                    />
+
+                    <div className="CanvasesPanel__actions">
+                      <button
+                        type="button"
+                        onClick={handleCreateCanvas}
+                        className="CanvasesPanelPrimaryButton"
+                      >
+                        New Canvas
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleSaveCurrentCanvas}
+                        className="CanvasesPanelPrimaryButton"
+                      >
+                        Save Current Canvas
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleSaveAsCanvas}
+                        className="CanvasesPanelPrimaryButton"
+                      >
+                        Save As
+                      </button>
+                    </div>
+
+                    {backendLoadingCanvases ? (
+                      <div className="CanvasesPanel__loading">Loading…</div>
+                    ) : backendCanvases.length === 0 ? (
+                      <div className="CanvasesPanel__empty">No canvases yet</div>
+                    ) : (
+                      <ul className="CanvasesPanel__list">
+                        {backendCanvases.map((canvas) => (
+                          <li key={canvas.id} className="CanvasCard">
+                            <div
+                              className="CanvasCard__preview"
+                              onClick={() => handleOpenCanvas(canvas.id)}
+                            >
+                              {canvas.thumbnail ? (
+                                <img
+                                  src={canvas.thumbnail}
+                                  alt={canvas.name}
+                                  className="CanvasCard__thumbnail"
+                                />
+                              ) : (
+                                <div className="CanvasCard__thumbnailPlaceholder">
+                                  No thumbnail
+                                </div>
+                              )}
+
+                              <div
+                                className={`CanvasCard__name ${
+                                  currentCanvasId === canvas.id
+                                    ? "CanvasCard__name--current"
+                                    : ""
+                                }`}
+                              >
+                                {canvas.name}
+                              </div>
+
+                              <div className="CanvasCard__meta">{canvas.id}</div>
+                            </div>
+
+                            <div className="CanvasCard__toolbar">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenCanvas(canvas.id)}
+                                className="CanvasCard__action"
+                              >
+                                Open
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleDuplicateCanvas(canvas.id)}
+                                className="CanvasCard__action"
+                              >
+                                Duplicate
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteCanvas(canvas.id)}
+                                className="CanvasCard__action"
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
+              {!isCollabDisabled && collabAPI && (
+                <LiveCollaborationTrigger
+                  isCollaborating={isCollaborating}
+                  onSelect={() =>
+                    setShareDialogState({ isOpen: true, type: "share" })
+                  }
+                  editorInterface={editorInterface}
+                />
+              )}
             </div>
           );
         }}
