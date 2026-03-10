@@ -3,21 +3,17 @@ services:
     build:
       context: .
       args:
-        - NODE_ENV=development
-    container_name: excalidraw
+        NODE_ENV: development
+        VITE_APP_ENABLE_BACKEND_AUTH: "true"
+        VITE_APP_AUTH_BACKEND: "http://192.168.8.13:3002/auth"
+        VITE_APP_HTTP_STORAGE_BACKEND_URL: "http://192.168.8.13:3002/api/v2"
+        VITE_APP_AI_BACKEND: "http://192.168.8.13:3002/api/v2/ai"
+        VITE_APP_WS_SERVER_URL: "http://localhost:3002"
+        VITE_APP_PLUS_APP: "http://localhost:3000"
+        VITE_APP_PLUS_LP: "https://plus.excalidraw.com"
+    container_name: excalidraw_1.0.6
     ports:
       - "3000:80"
     restart: on-failure
-    stdin_open: true
     healthcheck:
       disable: true
-    environment:
-      - NODE_ENV=development
-    volumes:
-      - ./:/opt/node_app/app:delegated
-      - ./package.json:/opt/node_app/package.json
-      - ./yarn.lock:/opt/node_app/yarn.lock
-      - notused:/opt/node_app/app/node_modules
-
-volumes:
-  notused:
