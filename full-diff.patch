@@ -1,0 +1,1473 @@
+diff -ruN '--exclude=.git' '--exclude=node_modules' '--exclude=dist' '--exclude=build' '--exclude=.next' '--exclude=.turbo' '--exclude=coverage' excalidraw-main/.env excalidraw-frontend-edited/.env
+--- excalidraw-main/.env	1970-01-01 03:00:00.000000000 +0300
++++ excalidraw-frontend-edited/.env	2026-03-10 05:26:51.912853425 +0300 
+@@ -0,0 +1,60 @@
++MODE="development"
++
++VITE_APP_BACKEND_V2_GET_URL=https://json-dev.excalidraw.com/api/v2/
++VITE_APP_BACKEND_V2_POST_URL=https://json-dev.excalidraw.com/api/v2/post/
++
++VITE_APP_LIBRARY_URL=https://libraries.excalidraw.com
++VITE_APP_LIBRARY_BACKEND=https://us-central1-excalidraw-room-persistence.cloudfunctions.net/libraries
++
++# collaboration WebSocket server (https://github.com/excalidraw/excalidraw-room)
++VITE_APP_WS_SERVER_URL=http://localhost:3002
++
++VITE_APP_PLUS_LP=https://plus.excalidraw.com
++VITE_APP_PLUS_APP=http://localhost:3000
++
++VITE_APP_AI_BACKEND=http://localhost:3016
++
++VITE_APP_FIREBASE_CONFIG='{"apiKey":"AIzaSyCMkxA60XIW8KbqMYL7edC4qT5l4qHX2h8","authDomain":"excalidraw-oss-dev.firebaseapp.com","projectId":"excalidraw-oss-dev","storageBucket":"excalidraw-oss-dev.appspot.com","messagingSenderId":"664559512677","appId":"1:664559512677:web:a385181f2928d328a7aa8c"}'
++
++# put these in your .env.local, or make sure you don't commit!
++# must be lowercase `true` when turned on
++#
++# whether to disable live reload / HMR. Usuaully what you want to do when
++# debugging Service Workers.
++VITE_APP_DEV_DISABLE_LIVE_RELOAD=
++VITE_APP_ENABLE_TRACKING=true
++
++FAST_REFRESH=false
++
++# The port the run the dev server
++VITE_APP_PORT=3001
++
++#Debug flags
++
++# To enable bounding box for text containers
++VITE_APP_DEBUG_ENABLE_TEXT_CONTAINER_BOUNDING_BOX=
++
++# Set this flag to false if you want to open the overlay by default
++VITE_APP_COLLAPSE_OVERLAY=true
++
++# Set this flag to false to disable eslint
++VITE_APP_ENABLE_ESLINT=true
++
++# Enable PWA in dev server
++VITE_APP_ENABLE_PWA=false
++
++VITE_APP_PLUS_EXPORT_PUBLIC_KEY='MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAm2g5T+Rub6Kbf1Mf57t0
++7r2zeHuVg4dla3r5ryXMswtzz6x767octl6oLThn33mQsPSy3GKglFZoCTXJR4ij
++ba8SxB04sL/N8eRrKja7TFWjCVtRwTTfyy771NYYNFVJclkxHyE5qw4m27crHF1y
++UNWEjuqNMi/lwAErS9fFa2oJlWyT8U7zzv/5kQREkxZI6y9v0AF3qcbsy2731FnD
++s9ChJvOUW9toIab2gsIdrKW8ZNpu084ZFVKb6LNjvIXI1Se4oMTHeszXzNptzlot
++kdxxjOoaQMAyfljFSot1F1FlU6MQlag7UnFGvFjRHN1JI5q4K+n3a67DX+TMyRqS
++HQIDAQAB'
++
++# set to true in .env.development.local to disable the prevent unload dialog
++VITE_APP_DISABLE_PREVENT_UNLOAD=
++
++VITE_APP_ENABLE_BACKEND_AUTH=true
++VITE_APP_AUTH_BACKEND=http://192.168.8.13:3002/auth
++VITE_APP_HTTP_STORAGE_BACKEND_URL=http://192.168.8.13:3002/api/v2
++VITE_APP_AI_BACKEND=http://192.168.8.13:3002/api/v2/ai
+\ No newline at end of file
+
+
+diff -ruN '--exclude=.git' '--exclude=node_modules' '--exclude=dist' '--exclude=build' '--exclude=.next' '--exclude=.turbo' '--exclude=coverage' excalidraw-main/excalidraw-app/App.tsx excalidraw-frontend-edited/excalidraw-app/App.tsx
+--- excalidraw-main/excalidraw-app/App.tsx	2026-03-10 05:26:47.125923968 +0300
++++ excalidraw-frontend-edited/excalidraw-app/App.tsx	2026-03-10 05:26:51.934566195 +0300
+@@ -5,8 +5,7 @@
+  CaptureUpdateAction,
+  reconcileElements,
+  useEditorInterface,
+-  ExcalidrawAPIProvider,
+-  useExcalidrawAPI,
++  exportToCanvas,
+} from "@excalidraw/excalidraw";
+import { trackEvent } from "@excalidraw/excalidraw/analytics";
+import { getDefaultAppState } from "@excalidraw/excalidraw/appState";
+@@ -36,6 +35,7 @@
+import polyfill from "@excalidraw/excalidraw/polyfill";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { loadFromBlob } from "@excalidraw/excalidraw/data/blob";
++import { useCallbackRefState } from "@excalidraw/excalidraw/hooks/useCallbackRefState";
+import { t } from "@excalidraw/excalidraw/i18n";
+
+import {
+@@ -75,7 +75,6 @@
+  BinaryFiles,
+  ExcalidrawInitialDataState,
+  UIAppState,
+-  ExcalidrawProps,
+} from "@excalidraw/excalidraw/types";
+import type { ResolutionType } from "@excalidraw/common/utility-types";
+import type { ResolvablePromise } from "@excalidraw/common/utils";
+@@ -93,7 +92,20 @@
+  isExcalidrawPlusSignedUser,
+  STORAGE_KEYS,
+  SYNC_BROWSER_TABS_TIMEOUT,
++  ENABLE_BACKEND_AUTH,
+} from "./app_constants";
++import {
++  isBackendLoggedIn,
++  redirectToBackendLogin,
++  setBackendJwt,
++  getBackendDisplayName,
++  clearBackendJwt,
++  listCanvases,
++  saveCanvas,
++  getCanvas,
++  deleteCanvas,
++} from "./data/backend";
++
+import Collab, {
+  collabAPIAtom,
+  isCollaboratingAtom,
+@@ -116,7 +128,6 @@
+} from "./data";
+
+import { updateStaleImageStatuses } from "./data/FileManager";
+-import { FileStatusStore } from "./data/fileStatusStore";
+import {
+  importFromLocalStorage,
+  importUsernameFromLocalStorage,
+@@ -145,9 +156,10 @@
+
+import "./index.scss";
+
+-import { ExcalidrawPlusPromoBanner } from "./components/ExcalidrawPlusPromoBanner";
+import { AppSidebar } from "./components/AppSidebar";
+
++import "./components/CanvasesPanel.scss";
++
+import type { CollabAPI } from "./collab/Collab";
+
+polyfill();
+@@ -372,9 +384,22 @@
+};
+
+const ExcalidrawWrapper = () => {
+-  const excalidrawAPI = useExcalidrawAPI();
+-
+  const [errorMessage, setErrorMessage] = useState("");
++  const [backendLoggedIn, setBackendLoggedIn] = useState(false);
++  const [backendCanvases, setBackendCanvases] = useState<
++    Array<{ id: string; name: string; thumbnail?: string }>
++  >([]);
++  const [backendLoadingCanvases, setBackendLoadingCanvases] = useState(false);
++  const [backendDisplayName, setBackendDisplayName] = useState("");
++  const [currentCanvasId, setCurrentCanvasId] = useState<string | null>(null);
++  const [currentCanvasName, setCurrentCanvasName] = useState("");
++  const [currentCanvasIsDraft, setCurrentCanvasIsDraft] = useState(false);
++  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
++  const [canvasNameInput, setCanvasNameInput] = useState("");
++  const [isCanvasesPanelOpen, setIsCanvasesPanelOpen] = useState(false);
++  const [hasExcalidrawSidebarOpen, setHasExcalidrawSidebarOpen] =
++    useState(false);
++
+  const isCollabDisabled = isRunningInIframe();
+
+  const { editorTheme, appTheme, setAppTheme } = useHandleAppTheme();
+@@ -396,6 +421,92 @@
+
+  const debugCanvasRef = useRef<HTMLCanvasElement>(null);
+
++  const canvasesPanelRef = useRef<HTMLDivElement | null>(null);
++  const canvasesButtonRef = useRef<HTMLButtonElement | null>(null);
++  const orderedBackendCanvases = [...backendCanvases].sort((a, b) => {
++    if (a.id === currentCanvasId) {
++      return -1;
++    }
++    if (b.id === currentCanvasId) {
++      return 1;
++    }
++    return 0;
++  });
++  useEffect(() => {
++    if (!isCanvasesPanelOpen) {
++      return;
++    }
++
++    const handlePointerDown = (event: MouseEvent) => {
++      const target = event.target as Node | null;
++
++      if (!target) {
++        return;
++      }
++
++      const clickedInsidePanel =
++        canvasesPanelRef.current?.contains(target) ?? false;
++
++      const clickedOnButton =
++        canvasesButtonRef.current?.contains(target) ?? false;
++
++      if (!clickedInsidePanel && !clickedOnButton) {
++        setIsCanvasesPanelOpen(false);
++      }
++    };
++
++    document.addEventListener("mousedown", handlePointerDown);
++
++    return () => {
++      document.removeEventListener("mousedown", handlePointerDown);
++    };
++  }, [isCanvasesPanelOpen]);
++
++  useEffect(() => {
++    const checkSidebar = () => {
++      const sidebar =
++        document.querySelector(".DefaultSidebar") ||
++        document.querySelector('[data-testid="default-sidebar"]') ||
++        document.querySelector(".sidebar");
++
++      if (!sidebar) {
++        setHasExcalidrawSidebarOpen(false);
++        return;
++      }
++
++      const styles = window.getComputedStyle(sidebar as Element);
++      const rect = (sidebar as Element).getBoundingClientRect();
++
++      const isVisible =
++        styles.display !== "none" &&
++        styles.visibility !== "hidden" &&
++        rect.width > 0 &&
++        rect.height > 0;
++
++      setHasExcalidrawSidebarOpen(isVisible);
++    };
++
++    checkSidebar();
++
++    const observer = new MutationObserver(() => {
++      checkSidebar();
++    });
++
++    observer.observe(document.body, {
++      childList: true,
++      subtree: true,
++      attributes: true,
++      attributeFilter: ["class", "style", "data-state", "aria-hidden"],
++    });
++
++    window.addEventListener("resize", checkSidebar);
++
++    return () => {
++      observer.disconnect();
++      window.removeEventListener("resize", checkSidebar);
++    };
++  }, []);
++
+  useEffect(() => {
+    trackEvent("load", "frame", getFrame());
+    // Delayed so that the app has a time to load the latest SW
+@@ -404,6 +515,32 @@
+    }, VERSION_TIMEOUT);
+  }, []);
+
++  useEffect(() => {
++    if (!ENABLE_BACKEND_AUTH) {
++      return;
++    }
++
++    const url = new URL(window.location.href);
++    const token = url.searchParams.get("token");
++
++    if (token) {
++      setBackendJwt(token);
++      setBackendLoggedIn(true);
++      setBackendDisplayName(getBackendDisplayName());
++
++      url.searchParams.delete("token");
++      window.history.replaceState({}, "", url.toString());
++      return;
++    }
++
++    const loggedIn = isBackendLoggedIn();
++    setBackendLoggedIn(loggedIn);
++    setBackendDisplayName(loggedIn ? getBackendDisplayName() : "");
++  }, []);
++
++  const [excalidrawAPI, excalidrawRefCallback] =
++    useCallbackRefState<ExcalidrawImperativeAPI>();
++
+  const [, setShareDialogState] = useAtom(shareDialogStateAtom);
+  const [collabAPI] = useAtom(collabAPIAtom);
+  const [isCollaborating] = useAtomWithInitialValue(isCollaboratingAtom, () => {
+@@ -435,15 +572,18 @@
+    }
+  }, [excalidrawAPI]);
+
+-  // ---------------------------------------------------------------------------
+-  // Hoisted loadImages
+-  // ---------------------------------------------------------------------------
+-  const loadImages = useCallback(
+-    (data: ResolutionType<typeof initializeScene>, isInitialLoad = false) => {
+-      if (!data.scene || !excalidrawAPI) {
++  useEffect(() => {
++    if (!excalidrawAPI || (!isCollabDisabled && !collabAPI)) {
++      return;
++    }
++
++    const loadImages = (
++      data: ResolutionType<typeof initializeScene>,
++      isInitialLoad = false,
++    ) => {
++      if (!data.scene) {
+        return;
+      }
+-
+      if (collabAPI?.isCollaborating()) {
+        if (data.scene.elements) {
+          collabAPI
+@@ -470,12 +610,6 @@
+          }, [] as FileId[]) || [];
+
+        if (data.isExternalScene) {
+-          if (fileIds.length) {
+-            // Direct Firebase call (not through FileManager), so track manually
+-            FileStatusStore.updateStatuses(
+-              fileIds.map((id) => [id, "loading"]),
+-            );
+-          }
+          loadFilesFromFirebase(
+            `${FIREBASE_STORAGE_PREFIXES.shareLinkFiles}/${data.id}`,
+            data.key,
+@@ -487,18 +621,12 @@
+              erroredFiles,
+              elements: excalidrawAPI.getSceneElementsIncludingDeleted(),
+            });
+-            FileStatusStore.updateStatuses([
+-              ...loadedFiles.map((f) => [f.id, "loaded"] as [FileId, "loaded"]),
+-              ...[...erroredFiles.keys()].map(
+-                (id) => [id, "error"] as [FileId, "error"],
+-              ),
+-            ]);
+          });
+        } else if (isInitialLoad) {
+          if (fileIds.length) {
+            LocalData.fileStorage
+              .getFiles(fileIds)
+-              .then(async ({ loadedFiles, erroredFiles }) => {
++              .then(({ loadedFiles, erroredFiles }) => {
+                if (loadedFiles.length) {
+                  excalidrawAPI.addFiles(loadedFiles);
+                }
+@@ -511,19 +639,10 @@
+          }
+          // on fresh load, clear unused files from IDB (from previous
+          // session)
+-          LocalData.fileStorage.clearObsoleteFiles({
+-            currentFileIds: fileIds,
+-          });
++          LocalData.fileStorage.clearObsoleteFiles({ currentFileIds: fileIds });
+        }
+      }
+-    },
+-    [collabAPI, excalidrawAPI],
+-  );
+-
+-  useEffect(() => {
+-    if (!excalidrawAPI || (!isCollabDisabled && !collabAPI)) {
+-      return;
+-    }
++    };
+
+    initializeScene({ collabAPI, excalidrawAPI }).then(async (data) => {
+      loadImages(data, /* isInitialLoad */ true);
+@@ -648,7 +767,7 @@
+        false,
+      );
+    };
+-  }, [isCollabDisabled, collabAPI, excalidrawAPI, setLangCode, loadImages]);
++  }, [isCollabDisabled, collabAPI, excalidrawAPI, setLangCode]);
+
+  useEffect(() => {
+    const unloadHandler = (event: BeforeUnloadEvent) => {
+@@ -725,12 +844,470 @@
+        window.devicePixelRatio,
+      );
+    }
++
++    if (backendLoggedIn && currentCanvasId) {
++      setHasUnsavedChanges(true);
++    }
++  };
++  const decodeBase64Utf8 = (value: string) => {
++    const binary = atob(value);
++    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
++    return new TextDecoder("utf-8").decode(bytes);
++  };
++  const refreshBackendCanvases = useCallback(async () => {
++    try {
++      setBackendLoadingCanvases(true);
++      const canvases = await listCanvases();
++
++      setBackendCanvases(
++        canvases.map((item) => ({
++          id: item.id,
++          name: item.name || item.id,
++          thumbnail: item.thumbnail,
++        })),
++      );
++    } catch (error) {
++      console.error("Failed to load backend canvases", error);
++    } finally {
++      setBackendLoadingCanvases(false);
++    }
++  }, []);
++  const generateCanvasThumbnail = useCallback(async () => {
++    if (!excalidrawAPI) {
++      return "";
++    }
++
++    try {
++      const elements = excalidrawAPI
++        .getSceneElementsIncludingDeleted()
++        .filter((element) => !element.isDeleted);
++
++      if (!elements.length) {
++        return "";
++      }
++
++      const sourceCanvas = await exportToCanvas({
++        elements,
++        appState: {
++          ...excalidrawAPI.getAppState(),
++          exportBackground: true,
++          viewBackgroundColor:
++            excalidrawAPI.getAppState().viewBackgroundColor || "#ffffff",
++        },
++        files: excalidrawAPI.getFiles(),
++      });
++
++      const thumbnailWidth = 320;
++      const thumbnailHeight = 180;
++      const padding = 12;
++
++      const output = document.createElement("canvas");
++      output.width = thumbnailWidth;
++      output.height = thumbnailHeight;
++
++      const ctx = output.getContext("2d");
++      if (!ctx) {
++        return sourceCanvas.toDataURL("image/png");
++      }
++
++      ctx.fillStyle =
++        excalidrawAPI.getAppState().viewBackgroundColor || "#ffffff";
++      ctx.fillRect(0, 0, thumbnailWidth, thumbnailHeight);
++
++      const scale = Math.min(
++        (thumbnailWidth - padding * 2) / sourceCanvas.width,
++        (thumbnailHeight - padding * 2) / sourceCanvas.height,
++      );
++
++      const drawWidth = sourceCanvas.width * scale;
++      const drawHeight = sourceCanvas.height * scale;
++      const dx = (thumbnailWidth - drawWidth) / 2;
++      const dy = (thumbnailHeight - drawHeight) / 2;
++
++      ctx.drawImage(sourceCanvas, dx, dy, drawWidth, drawHeight);
++
++      return output.toDataURL("image/png");
++    } catch (error) {
++      console.error("Failed to generate thumbnail", error);
++      return "";
++    }
++  }, [excalidrawAPI]);
++  const createDraftCanvas = useCallback(async () => {
++    if (!excalidrawAPI) {
++      return;
++    }
++
++    const draftId = `draft-${Date.now()}`;
++
++    await saveCanvas(draftId, {
++      name: "مسودة",
++      thumbnail: "",
++      data: {
++        elements: [],
++        appState: excalidrawAPI.getAppState(),
++        files: {},
++      },
++    });
++
++    setCurrentCanvasId(draftId);
++    setCurrentCanvasName("مسودة");
++    setCanvasNameInput("مسودة");
++    setCurrentCanvasIsDraft(true);
++
++    await refreshBackendCanvases();
++  }, [excalidrawAPI, refreshBackendCanvases]);
++  const parseStoredCanvasData = (rawData: unknown) => {
++    if (!rawData) {
++      return null;
++    }
++
++    if (typeof rawData === "string") {
++      try {
++        return JSON.parse(rawData);
++      } catch {
++        try {
++          return JSON.parse(decodeBase64Utf8(rawData));
++        } catch (error) {
++          console.error("Failed to parse stored canvas data", error);
++          return null;
++        }
++      }
++    }
++
++    if (typeof rawData === "object") {
++      return rawData;
++    }
++
++    return null;
++  };
++  const saveCanvasWithIdAndName = async (
++    canvasId: string,
++    canvasName: string,
++  ) => {
++    if (!excalidrawAPI) {
++      return;
++    }
++
++    const elements = excalidrawAPI.getSceneElementsIncludingDeleted();
++    const appState = excalidrawAPI.getAppState();
++    const files = excalidrawAPI.getFiles();
++    const thumbnail = await generateCanvasThumbnail();
++
++    const payload = {
++      name: canvasName,
++      thumbnail,
++      data: {
++        elements,
++        appState,
++        files,
++      },
++    };
++
++    await saveCanvas(canvasId, payload);
++
++    setCurrentCanvasId(canvasId);
++    setCurrentCanvasName(canvasName);
++    setCanvasNameInput(canvasName);
++
++    await refreshBackendCanvases();
+  };
++  const handleCreateCanvas = async () => {
++    if (!excalidrawAPI) {
++      return;
++    }
+
++    if (currentCanvasIsDraft && currentCanvasId) {
++      const confirmed = window.confirm(
++        "لديك مسودة حالية. سيتم حذفها وإنشاء مسودة جديدة. هل تريد المتابعة؟",
++      );
++
++      if (!confirmed) {
++        return;
++      }
++
++      await deleteCanvas(currentCanvasId);
++    } else if (currentCanvasId) {
++      await handleSaveCurrentCanvas();
++    }
++
++    excalidrawAPI.updateScene({
++      elements: [],
++      appState: {
++        ...getDefaultAppState(),
++        collaborators: new Map(),
++      },
++      captureUpdate: CaptureUpdateAction.IMMEDIATELY,
++    });
++
++    setCurrentCanvasId(null);
++    setCurrentCanvasName("");
++    setCanvasNameInput("");
++    setCurrentCanvasIsDraft(false);
++    setHasUnsavedChanges(false);
++
++    await createDraftCanvas();
++  };
++  const handleSaveCurrentCanvas = async () => {
++    if (!excalidrawAPI || !currentCanvasId) {
++      return;
++    }
++
++    if (currentCanvasIsDraft) {
++      const name = window.prompt("أدخل اسم اللوحة", "");
++      if (!name || !name.trim()) {
++        return;
++      }
++
++      const finalName = name.trim();
++
++      await saveCanvasWithIdAndName(currentCanvasId, finalName);
++      setCurrentCanvasName(finalName);
++      setCanvasNameInput(finalName);
++      setCurrentCanvasIsDraft(false);
++      setHasUnsavedChanges(false);
++      return;
++    }
++
++    const finalName = canvasNameInput.trim() || currentCanvasName || "Untitled";
++
++    await saveCanvasWithIdAndName(currentCanvasId, finalName);
++    setCurrentCanvasName(finalName);
++    setCanvasNameInput(finalName);
++    setHasUnsavedChanges(false);
++  };
++  const handleSaveAsCanvas = async () => {
++    if (!excalidrawAPI) {
++      return;
++    }
++
++    const name = canvasNameInput.trim();
++    if (!name) {
++      setErrorMessage("Please enter a canvas name");
++      return;
++    }
++
++    const key = `canvas-${Date.now()}`;
++
++    try {
++      await saveCanvasWithIdAndName(key, name);
++    } catch (error) {
++      console.error("Failed to save canvas as new", error);
++      setErrorMessage("Failed to save canvas as new");
++    }
++  };
++  const handleOpenCanvas = async (canvasId: string) => {
++    if (!excalidrawAPI) {
++      return;
++    }
++
++    try {
++      if (currentCanvasId && currentCanvasId !== canvasId) {
++        if (currentCanvasIsDraft) {
++          const confirmed = window.confirm(
++            "اللوحة الحالية هي مسودة. عند الانتقال إلى لوحة محفوظة سيتم حذف هذه المسودة. هل تريد المتابعة؟",
++          );
++
++          if (!confirmed) {
++            return;
++          }
++
++          await deleteCanvas(currentCanvasId);
++          setCurrentCanvasId(null);
++          setCurrentCanvasName("");
++          setCanvasNameInput("");
++          setCurrentCanvasIsDraft(false);
++        } else {
++          await handleSaveCurrentCanvas();
++        }
++      }
++
++      const canvas = await getCanvas(canvasId);
++      const payload = canvas.data;
++
++      if (!payload) {
++        throw new Error("Canvas payload is empty");
++      }
++
++      setCurrentCanvasId(canvas.id || canvasId);
++      setCurrentCanvasName(canvas.name || "");
++      setCanvasNameInput(canvas.name || "");
++      setCurrentCanvasIsDraft(canvas.name === "مسودة");
++      setHasUnsavedChanges(false);
++
++      excalidrawAPI.updateScene({
++        elements: payload.elements || [],
++        appState: {
++          ...payload.appState,
++          collaborators: new Map(),
++        },
++        captureUpdate: CaptureUpdateAction.IMMEDIATELY,
++      });
++
++      if (payload.files) {
++        excalidrawAPI.addFiles(Object.values(payload.files));
++      }
++    } catch (error) {
++      console.error("Failed to open canvas", error);
++      setErrorMessage("Failed to open canvas");
++    }
++  };
++  const handleRenameCanvas = async (canvasId: string, newName: string) => {
++    if (!newName.trim()) {
++      setErrorMessage("Please enter a canvas name");
++      return;
++    }
++
++    try {
++      const canvas = await getCanvas(canvasId);
++      const payload = parseStoredCanvasData(canvas.data);
++
++      if (!payload) {
++        throw new Error("Canvas payload is empty or invalid");
++      }
++
++      await saveCanvas(canvasId, {
++        id: canvasId,
++        name: newName.trim(),
++        thumbnail: canvas.thumbnail || "",
++        data:
++          typeof canvas.data === "string"
++            ? canvas.data
++            : JSON.stringify(payload),
++      });
++
++      if (currentCanvasId === canvasId) {
++        setCurrentCanvasName(newName.trim());
++        setCanvasNameInput(newName.trim());
++      }
++
++      await refreshBackendCanvases();
++    } catch (error) {
++      console.error("Failed to rename canvas", error);
++      setErrorMessage("Failed to rename canvas");
++    }
++  };
++  const handleDeleteCanvas = async (canvasId: string) => {
++    const confirmed = window.confirm("هل أنت متأكد من حذف هذه اللوحة؟");
++    if (!confirmed) {
++      return;
++    }
++
++    try {
++      await deleteCanvas(canvasId);
++
++      if (currentCanvasId === canvasId) {
++        setCurrentCanvasId(null);
++        setCurrentCanvasName("");
++        setCanvasNameInput("");
++        setCurrentCanvasIsDraft(false);
++        setHasUnsavedChanges(false);
++      }
++
++      await refreshBackendCanvases();
++    } catch (error) {
++      console.error("Failed to delete canvas", error);
++      setErrorMessage("Failed to delete canvas");
++    }
++  };
++  const handleDuplicateCanvas = async (canvasId: string) => {
++    try {
++      const sourceCanvas = await getCanvas(canvasId);
++
++      if (!sourceCanvas?.data) {
++        throw new Error("Source canvas payload is empty");
++      }
++
++      const newId = `canvas-${Date.now()}`;
++      const newName = sourceCanvas.name
++        ? `${sourceCanvas.name} Copy`
++        : `Canvas ${new Date().toLocaleString()}`;
++
++      await saveCanvas(newId, {
++        name: newName,
++        thumbnail: sourceCanvas.thumbnail || "",
++        data: sourceCanvas.data,
++      });
++
++      await refreshBackendCanvases();
++    } catch (error) {
++      console.error("Failed to duplicate canvas", error);
++      setErrorMessage("Failed to duplicate canvas");
++    }
++  };
+  const [latestShareableLink, setLatestShareableLink] = useState<string | null>(
+    null,
+  );
+
++  useEffect(() => {
++    if (!ENABLE_BACKEND_AUTH || !backendLoggedIn) {
++      return;
++    }
++
++    void refreshBackendCanvases();
++  }, [backendLoggedIn, refreshBackendCanvases]);
++  useEffect(() => {
++    if (!backendLoggedIn || !excalidrawAPI) {
++      return;
++    }
++
++    if (!currentCanvasId) {
++      void createDraftCanvas();
++    }
++  }, [backendLoggedIn, excalidrawAPI, currentCanvasId, createDraftCanvas]);
++  useEffect(() => {
++    if (
++      !backendLoggedIn ||
++      !currentCanvasId ||
++      !hasUnsavedChanges ||
++      !excalidrawAPI
++    ) {
++      return;
++    }
++
++    const timer = window.setTimeout(async () => {
++      try {
++        const elements = excalidrawAPI.getSceneElementsIncludingDeleted();
++        const appState = excalidrawAPI.getAppState();
++        const files = excalidrawAPI.getFiles();
++        const thumbnail = await generateCanvasThumbnail();
++
++        await saveCanvas(currentCanvasId, {
++          name: currentCanvasName || "مسودة",
++          thumbnail,
++          data: {
++            elements,
++            appState,
++            files,
++          },
++        });
++
++        setHasUnsavedChanges(false);
++
++        setBackendCanvases((prev) =>
++          prev.map((canvas) =>
++            canvas.id === currentCanvasId
++              ? {
++                  ...canvas,
++                  name: currentCanvasName || "مسودة",
++                  thumbnail,
++                }
++              : canvas,
++          ),
++        );
++      } catch (error) {
++        console.error("Failed to autosave canvas", error);
++      }
++    }, 1200);
++
++    return () => window.clearTimeout(timer);
++  }, [
++    backendLoggedIn,
++    currentCanvasId,
++    currentCanvasName,
++    hasUnsavedChanges,
++    excalidrawAPI,
++    generateCanvasThumbnail,
++  ]);
+  const onExportToBackend = async (
+    exportedElements: readonly NonDeletedExcalidrawElement[],
+    appState: Partial<AppState>,
+@@ -793,56 +1370,6 @@
+    [setShareDialogState],
+  );
+
+-  // ---------------------------------------------------------------------------
+-  // onExport — intercepts file save to wait for pending image loads
+-  // ---------------------------------------------------------------------------
+-  const onExport: Required<ExcalidrawProps>["onExport"] = useCallback(
+-    async function* () {
+-      let snapshot = FileStatusStore.getSnapshot();
+-      const { pending, total } = FileStatusStore.getPendingCount(
+-        snapshot.value,
+-      );
+-      if (pending === 0) {
+-        return;
+-      }
+-
+-      // Yield initial progress
+-      yield {
+-        type: "progress",
+-        progress: (total - pending) / total,
+-        message: `Loading images (${total - pending}/${total})...`,
+-      };
+-
+-      // Wait for all pending images to finish
+-      while (true) {
+-        snapshot = await FileStatusStore.pull(snapshot.version);
+-        const { pending: nowPending, total: nowTotal } =
+-          FileStatusStore.getPendingCount(snapshot.value);
+-
+-        yield {
+-          type: "progress",
+-          progress: (nowTotal - nowPending) / nowTotal,
+-          message: `Loading images (${nowTotal - nowPending}/${nowTotal})...`,
+-        };
+-
+-        if (nowPending === 0) {
+-          await new Promise((r) => setTimeout(r, 500));
+-          yield {
+-            type: "progress",
+-            message: `Preparing export...`,
+-          };
+-          return;
+-        }
+-      }
+-    },
+-    [],
+-  );
+-
+-  // const onExport = () => {
+-  //   return new Promise((r) => setTimeout(r, 2500));
+-  //   // console.log("onExport");
+-  // };
+-
+  // browsers generally prevent infinite self-embedding, there are
+  // cases where it still happens, and while we disallow self-embedding
+  // by not whitelisting our own origin, this serves as an additional guard
+@@ -909,8 +1436,8 @@
+      })}
+    >
+      <Excalidraw
++        excalidrawAPI={excalidrawRefCallback}
+        onChange={onChange}
+-        onExport={onExport}
+        initialData={initialStatePromiseRef.current.promise}
+        isCollaborating={isCollaborating}
+        onPointerUpdate={collabAPI?.onPointerUpdate}
+@@ -953,26 +1480,167 @@
+        autoFocus={true}
+        theme={editorTheme}
+        renderTopRightUI={(isMobile) => {
+-          if (isMobile || !collabAPI || isCollabDisabled) {
++          if (isMobile) {
+            return null;
+          }
+
+          return (
+            <div className="excalidraw-ui-top-right">
+-              {excalidrawAPI?.getEditorInterface().formFactor === "desktop" && (
+-                <ExcalidrawPlusPromoBanner
+-                  isSignedIn={isExcalidrawPlusSignedUser}
++              {collabError.message && <CollabError collabError={collabError} />}
++
++              {backendLoggedIn && (
++                <button
++                  ref={canvasesButtonRef}
++                  type="button"
++                  onClick={() => setIsCanvasesPanelOpen((prev) => !prev)}
++                  className="CanvasesPanelButton"
++                >
++                  <span aria-hidden="true">📁</span>
++                  <span>Canvases</span>
++                </button>
++              )}
++              {backendLoggedIn && isCanvasesPanelOpen && (
++                <div
++                  ref={canvasesPanelRef}
++                  className={`CanvasesPanel ${
++                    hasExcalidrawSidebarOpen ? "CanvasesPanel--withSidebar" : ""
++                  }`}
++                >
++                  <div className="CanvasesPanel__header">
++                    <div className="CanvasesPanel__title">My Canvases</div>
++                    <button
++                      type="button"
++                      className="CanvasesPanel__close"
++                      onClick={() => setIsCanvasesPanelOpen(false)}
++                    >
++                      Close
++                    </button>
++                  </div>
++
++                  {currentCanvasId && (
++                    <div className="CanvasesPanel__current">
++                      Current: {currentCanvasName || currentCanvasId}
++                    </div>
++                  )}
++
++                  {currentCanvasIsDraft && (
++                    <div className="CanvasesPanel__draftWarning">
++                      اللوحة الحالية هي مسودة. إذا انتقلت إلى لوحة محفوظة، سيتم
++                      حذف هذه المسودة.
++                    </div>
++                  )}
++
++                  <input
++                    type="text"
++                    value={canvasNameInput}
++                    onChange={(event) => setCanvasNameInput(event.target.value)}
++                    placeholder="Canvas name"
++                    className="CanvasesPanel__input"
++                  />
++
++                  <div className="CanvasesPanel__actions">
++                    <button
++                      type="button"
++                      onClick={handleCreateCanvas}
++                      className="CanvasesPanelPrimaryButton"
++                    >
++                      New Canvas
++                    </button>
++
++                    <button
++                      type="button"
++                      onClick={handleSaveCurrentCanvas}
++                      className="CanvasesPanelPrimaryButton"
++                    >
++                      Save Current Canvas
++                    </button>
++
++                    <button
++                      type="button"
++                      onClick={handleSaveAsCanvas}
++                      className="CanvasesPanelPrimaryButton"
++                    >
++                      Save As
++                    </button>
++                  </div>
++
++                  {backendLoadingCanvases ? (
++                    <div className="CanvasesPanel__loading">Loading…</div>
++                  ) : backendCanvases.length === 0 ? (
++                    <div className="CanvasesPanel__empty">No canvases yet</div>
++                  ) : (
++                    <ul className="CanvasesPanel__list">
++                      {orderedBackendCanvases.map((canvas) => (
++                        <li key={canvas.id} className="CanvasCard">
++                          <div
++                            className="CanvasCard__preview"
++                            onClick={() => handleOpenCanvas(canvas.id)}
++                          >
++                            {canvas.thumbnail ? (
++                              <img
++                                src={canvas.thumbnail}
++                                alt={canvas.name}
++                                className="CanvasCard__thumbnail"
++                              />
++                            ) : (
++                              <div className="CanvasCard__thumbnailPlaceholder">
++                                No thumbnail
++                              </div>
++                            )}
++
++                            <div
++                              className={`CanvasCard__name ${
++                                currentCanvasId === canvas.id
++                                  ? "CanvasCard__name--current"
++                                  : ""
++                              }`}
++                            >
++                              {canvas.name}
++                            </div>
++
++                            <div className="CanvasCard__meta">{canvas.id}</div>
++                          </div>
++
++                          <div className="CanvasCard__toolbar">
++                            <button
++                              type="button"
++                              onClick={() => handleOpenCanvas(canvas.id)}
++                              className="CanvasCard__action"
++                            >
++                              Open
++                            </button>
++
++                            <button
++                              type="button"
++                              onClick={() => handleDuplicateCanvas(canvas.id)}
++                              className="CanvasCard__action"
++                            >
++                              Duplicate
++                            </button>
++
++                            <button
++                              type="button"
++                              onClick={() => handleDeleteCanvas(canvas.id)}
++                              className="CanvasCard__action CanvasCard__action--danger"
++                            >
++                              Delete
++                            </button>
++                          </div>
++                        </li>
++                      ))}
++                    </ul>
++                  )}
++                </div>
++              )}
++              {!isCollabDisabled && collabAPI && (
++                <LiveCollaborationTrigger
++                  isCollaborating={isCollaborating}
++                  onSelect={() =>
++                    setShareDialogState({ isOpen: true, type: "share" })
++                  }
++                  editorInterface={editorInterface}
+                />
+              )}
+-
+-              {collabError.message && <CollabError collabError={collabError} />}
+-              <LiveCollaborationTrigger
+-                isCollaborating={isCollaborating}
+-                onSelect={() =>
+-                  setShareDialogState({ isOpen: true, type: "share" })
+-                }
+-                editorInterface={editorInterface}
+-              />
+            </div>
+          );
+        }}
+@@ -990,10 +1658,26 @@
+          theme={appTheme}
+          setTheme={(theme) => setAppTheme(theme)}
+          refresh={() => forceRefresh((prev) => !prev)}
++          backendLoggedIn={backendLoggedIn}
++          backendDisplayName={backendDisplayName}
++          onBackendLogin={() => redirectToBackendLogin()}
++          onBackendLogout={() => {
++            clearBackendJwt();
++            setBackendLoggedIn(false);
++            setBackendDisplayName("");
++            setBackendCanvases([]);
++            setCurrentCanvasId(null);
++            setCurrentCanvasName("");
++            setCanvasNameInput("");
++            setCurrentCanvasIsDraft(false);
++            setHasUnsavedChanges(false);
++          }}
+        />
+        <AppWelcomeScreen
+          onCollabDialogOpen={onCollabDialogOpen}
+          isCollabEnabled={!isCollabDisabled}
++          backendLoggedIn={backendLoggedIn}
++          onBackendLogin={() => redirectToBackendLogin()}
+        />
+        <OverwriteConfirmDialog>
+          <OverwriteConfirmDialog.Actions.ExportToImage />
+@@ -1057,8 +1741,21 @@
+          }}
+        />
+
+-        <AppSidebar />
+-
++        <AppSidebar
++          backendLoggedIn={backendLoggedIn}
++          backendCanvases={backendCanvases}
++          backendLoadingCanvases={backendLoadingCanvases}
++          currentCanvasId={currentCanvasId}
++          currentCanvasName={currentCanvasName}
++          canvasNameInput={canvasNameInput}
++          onCanvasNameInputChange={setCanvasNameInput}
++          onCreateCanvas={handleCreateCanvas}
++          onSaveCurrentCanvas={handleSaveCurrentCanvas}
++          onSaveAsCanvas={handleSaveAsCanvas}
++          onOpenCanvas={handleOpenCanvas}
++          onDeleteCanvas={handleDeleteCanvas}
++          onRenameCanvas={handleRenameCanvas}
++        />
+        {errorMessage && (
+          <ErrorDialog onClose={() => setErrorMessage("")}>
+            {errorMessage}
+@@ -1276,9 +1973,7 @@
+  return (
+    <TopErrorBoundary>
+      <Provider store={appJotaiStore}>
+-        <ExcalidrawAPIProvider>
+-          <ExcalidrawWrapper />
+-        </ExcalidrawAPIProvider>
++        <ExcalidrawWrapper />
+      </Provider>
+    </TopErrorBoundary>
+  );
+
+
+diff -ruN '--exclude=.git' '--exclude=node_modules' '--exclude=dist' '--exclude=build' '--exclude=.next' '--exclude=.turbo' '--exclude=coverage' excalidraw-main/excalidraw-app/components/AppSidebar.tsx excalidraw-frontend-edited/excalidraw-app/components/AppSidebar.tsx
+--- excalidraw-main/excalidraw-app/components/AppSidebar.tsx	2026-03-10 05:26:47.127443719 +0300
++++ excalidraw-frontend-edited/excalidraw-app/components/AppSidebar.tsx	2026-03-10 05:26:51.936144995 +0300
+@@ -6,11 +6,44 @@
+import { LinkButton } from "@excalidraw/excalidraw/components/LinkButton";
+import { useUIAppState } from "@excalidraw/excalidraw/context/ui-appState";
+
++import { useState } from "react";
++
+import "./AppSidebar.scss";
+
+-export const AppSidebar = () => {
+-  const { theme, openSidebar } = useUIAppState();
++type AppSidebarProps = {
++  backendLoggedIn: boolean;
++  backendCanvases: Array<{ id: string; name: string; thumbnail?: string }>;
++  backendLoadingCanvases: boolean;
++  currentCanvasId: string | null;
++  currentCanvasName: string;
++  canvasNameInput: string;
++  onCanvasNameInputChange: (value: string) => void;
++  onCreateCanvas: () => void;
++  onSaveCurrentCanvas: () => void;
++  onSaveAsCanvas: () => void;
++  onOpenCanvas: (canvasId: string) => void;
++  onDeleteCanvas: (canvasId: string) => void;
++  onRenameCanvas: (canvasId: string, newName: string) => void;
++};
+
++export const AppSidebar = ({
++  backendLoggedIn,
++  backendCanvases,
++  backendLoadingCanvases,
++  currentCanvasId,
++  currentCanvasName,
++  canvasNameInput,
++  onCanvasNameInputChange,
++  onCreateCanvas,
++  onSaveCurrentCanvas,
++  onSaveAsCanvas,
++  onOpenCanvas,
++  onDeleteCanvas,
++  onRenameCanvas,
++}: AppSidebarProps) => {
++  const { theme, openSidebar } = useUIAppState();
++  const [renamingCanvasId, setRenamingCanvasId] = useState<string | null>(null);
++  const [renamingValue, setRenamingValue] = useState<string>("");
+  return (
+    <DefaultSidebar>
+      <DefaultSidebar.TabTriggers>
+@@ -20,6 +53,7 @@
+        >
+          {messageCircleIcon}
+        </Sidebar.TabTrigger>
++
+        <Sidebar.TabTrigger
+          tab="presentation"
+          style={{ opacity: openSidebar?.tab === "presentation" ? 1 : 0.4 }}
+@@ -27,6 +61,244 @@
+          {presentationIcon}
+        </Sidebar.TabTrigger>
+      </DefaultSidebar.TabTriggers>
++
++      {backendLoggedIn && (
++        <Sidebar.Tab tab="canvases" className="px-3">
++          <div className="app-sidebar-promo-container">
++            <div className="app-sidebar-promo-text">My Canvases</div>
++
++            {currentCanvasId && (
++              <div
++                style={{
++                  marginBottom: 10,
++                  fontSize: 12,
++                  opacity: 0.7,
++                }}
++              >
++                Current-Name: {currentCanvasName} && Current-ID:
++                {currentCanvasId}
++              </div>
++            )}
++
++            <input
++              type="text"
++              value={canvasNameInput}
++              onChange={(event) => onCanvasNameInputChange(event.target.value)}
++              placeholder="Canvas name"
++              style={{
++                width: "100%",
++                marginBottom: 10,
++                padding: "8px 10px",
++                border: "1px solid #ddd",
++                borderRadius: 6,
++                boxSizing: "border-box",
++              }}
++            />
++
++            <div
++              style={{
++                display: "grid",
++                gridTemplateColumns: "1fr",
++                gap: 8,
++                marginBottom: 12,
++              }}
++            >
++              <button
++                type="button"
++                onClick={onCreateCanvas}
++                style={{ width: "100%" }}
++              >
++                New Canvas
++              </button>
++
++              <button
++                type="button"
++                onClick={onSaveCurrentCanvas}
++                style={{ width: "100%" }}
++              >
++                Save Current Canvas
++              </button>
++
++              <button
++                type="button"
++                onClick={onSaveAsCanvas}
++                style={{ width: "100%" }}
++              >
++                Save As
++              </button>
++            </div>
++
++            {backendLoadingCanvases ? (
++              <div>Loading…</div>
++            ) : backendCanvases.length === 0 ? (
++              <div>No canvases yet</div>
++            ) : (
++              <ul style={{ margin: 0, paddingLeft: 0, listStyle: "none" }}>
++                {backendCanvases.map((canvas) => (
++                  <li key={canvas.id} style={{ marginBottom: 10 }}>
++                    <div
++                      style={{
++                        width: "100%",
++                        textAlign: "left",
++                        border: "1px solid #ddd",
++                        borderRadius: 8,
++                        background: "white",
++                        padding: 10,
++                      }}
++                    >
++                      <div
++                        onClick={() => onOpenCanvas(canvas.id)}
++                        style={{
++                          cursor: "pointer",
++                        }}
++                      >
++                        {canvas.thumbnail ? (
++                          <img
++                            src={canvas.thumbnail}
++                            alt={canvas.name}
++                            style={{
++                              width: "100%",
++                              height: 100,
++                              objectFit: "contain",
++                              background: "#fff",
++                              borderRadius: 6,
++                              marginBottom: 8,
++                            }}
++                          />
++                        ) : (
++                          <div
++                            style={{
++                              width: "100%",
++                              height: 100,
++                              borderRadius: 6,
++                              marginBottom: 8,
++                              background: "#f5f5f5",
++                              display: "flex",
++                              alignItems: "center",
++                              justifyContent: "center",
++                              fontSize: 12,
++                              opacity: 0.6,
++                            }}
++                          >
++                            No thumbnail
++                          </div>
++                        )}
++
++                        <div style={{ fontWeight: 600 }}>
++                          {canvas.name}
++                          {currentCanvasId === canvas.id ? " (Current)" : ""}
++                        </div>
++                        <div
++                          style={{
++                            fontSize: 12,
++                            opacity: 0.6,
++                            marginBottom: 8,
++                          }}
++                        >
++                          {canvas.id}
++                        </div>
++                      </div>
++
++                      {renamingCanvasId === canvas.id ? (
++                        <div
++                          style={{
++                            display: "flex",
++                            gap: 8,
++                            marginBottom: 8,
++                          }}
++                        >
++                          <input
++                            type="text"
++                            value={renamingValue}
++                            onChange={(event) =>
++                              setRenamingValue(event.target.value)
++                            }
++                            style={{
++                              flex: 1,
++                              padding: "6px 8px",
++                              border: "1px solid #ddd",
++                              borderRadius: 6,
++                            }}
++                          />
++                          <button
++                            type="button"
++                            onClick={() => {
++                              onRenameCanvas(canvas.id, renamingValue);
++                              setRenamingCanvasId(null);
++                              setRenamingValue("");
++                            }}
++                          >
++                            Save
++                          </button>
++                          <button
++                            type="button"
++                            onClick={() => {
++                              setRenamingCanvasId(null);
++                              setRenamingValue("");
++                            }}
++                          >
++                            Cancel
++                          </button>
++                        </div>
++                      ) : null}
++
++                      <div
++                        style={{ display: "flex", gap: 8, flexWrap: "wrap" }}
++                      >
++                        <button
++                          type="button"
++                          onClick={() => onOpenCanvas(canvas.id)}
++                          style={{
++                            flex: 1,
++                            border: "1px solid #ddd",
++                            borderRadius: 6,
++                            padding: "6px 10px",
++                            cursor: "pointer",
++                          }}
++                        >
++                          Open
++                        </button>
++
++                        <button
++                          type="button"
++                          onClick={() => {
++                            setRenamingCanvasId(canvas.id);
++                            setRenamingValue(canvas.name);
++                          }}
++                          style={{
++                            flex: 1,
++                            border: "1px solid #ddd",
++                            borderRadius: 6,
++                            padding: "6px 10px",
++                            cursor: "pointer",
++                          }}
++                        >
++                          Rename
++                        </button>
++
++                        <button
++                          type="button"
++                          onClick={() => onDeleteCanvas(canvas.id)}
++                          style={{
++                            flex: 1,
++                            border: "1px solid #ddd",
++                            borderRadius: 6,
++                            padding: "6px 10px",
++                            cursor: "pointer",
++                          }}
++                        >
++                          Delete
++                        </button>
++                      </div>
++                    </div>
++                  </li>
++                ))}
++              </ul>
++            )}
++          </div>
++        </Sidebar.Tab>
++      )}
++
+      <Sidebar.Tab tab="comments">
+        <div className="app-sidebar-promo-container">
+          <div
+@@ -50,6 +322,7 @@
+          </LinkButton>
+        </div>
+      </Sidebar.Tab>
++
+      <Sidebar.Tab tab="presentation" className="px-3">
+        <div className="app-sidebar-promo-container">
+          <div
+
